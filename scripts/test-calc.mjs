@@ -122,6 +122,33 @@ test('beste und schlechteste Stunde werden gefunden', () => {
   assert.ok(s.hours.best.delta >= s.hours.worst.delta);
 });
 
+test('Messpunkte vor dem Startschuss zählen nicht mit', () => {
+  // Der Sammler lief schon, die Show beginnt aber erst am 09.08. um 00:00.
+  const vorlauf = {
+    startAt: '2026-08-09T00:00:00+02:00',
+    entries: [entry('2026-08-08T20:00:00Z', 462_029, 52_543)],
+  };
+  const s = computeState(vorlauf, { now: new Date('2026-08-08T20:30:00Z') });
+  assert.equal(s.hasData, false);
+  assert.equal(s.pending, true);
+});
+
+test('ab dem Startschuss verankert die Gesamtperiode auf Mitternacht', () => {
+  const gemischt = {
+    startAt: '2026-08-09T00:00:00+02:00',
+    entries: [
+      entry('2026-08-08T20:00:00Z', 462_029, 52_543), // Vorlauf, muss rausfallen
+      entry('2026-08-08T22:00:00Z', 462_029, 53_000), // 09.08. 00:00 Zürich
+      entry('2026-08-09T04:00:00Z', 462_029, 54_000),
+    ],
+  };
+  const s = computeState(gemischt, { now: new Date('2026-08-09T04:30:00Z') });
+  assert.equal(s.hasData, true);
+  assert.equal(s.entries.length, 2);
+  assert.equal(s.total.from, '2026-08-08T22:00:00Z');
+  near(s.total.hodlDelta, 0.00462029 * (54_000 - 53_000));
+});
+
 test('ohne Daten meldet der Zustand den Wartemodus', () => {
   const s = computeState({ startAt: '2026-08-09T00:00:00+02:00', entries: [] }, { now: new Date('2026-08-08T10:00:00Z') });
   assert.equal(s.hasData, false);
