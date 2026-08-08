@@ -1,0 +1,15 @@
+{
+  "name": "dr-monetentracker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Vegas-Casino-Webapp, die eine Bitcoin-Wallet stuendlich ueberwacht und ausrechnet, was passiert waere, wenn um Punkt 00:00 niemand etwas angefasst haette.",
+  "scripts": {
+    "snapshot": "node scripts/snapshot.mjs",
+    "snapshot:fixture": "node scripts/snapshot.mjs --fixture",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "test": "node scripts/test-calc.mjs",
+    "serve": "python3 -m http.server 8765"
+  },
+  "license": "MIT"
+}

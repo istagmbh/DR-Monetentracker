@@ -1,0 +1,50 @@
+name: Auf GitHub Pages veröffentlichen
+
+# Damit das läuft, muss einmalig unter Settings → Pages die Quelle
+# auf "GitHub Actions" gestellt werden.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Nach jedem erfolgreichen Snapshot neu veröffentlichen, damit die frischen
+  # Zahlen sofort online stehen.
+  workflow_run:
+    workflows: ['Stündlicher Snapshot']
+    types: [completed]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Läuft ein Deploy bereits, wartet das nächste, statt es abzubrechen.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Bei workflow_run nur veröffentlichen, wenn der Snapshot auch geklappt hat.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rechenlogik prüfen
+        run: node scripts/test-calc.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,39 @@
+name: Prüfungen
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Rechenlogik prüfen
+        run: node scripts/test-calc.mjs
+
+      - name: Snapshot gegen Fixtures durchspielen
+        run: node scripts/snapshot.mjs --fixture --dry-run
+
+      - name: Vorschaudaten müssen reproduzierbar sein
+        run: |
+          node scripts/seed-demo.mjs
+          if ! git diff --quiet -- data/demo-history.json; then
+            echo "data/demo-history.json weicht vom Skript ab — bitte neu erzeugen und committen." >&2
+            git diff --stat -- data/demo-history.json
+            exit 1
+          fi

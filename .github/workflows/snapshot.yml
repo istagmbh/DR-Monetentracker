@@ -1,0 +1,52 @@
+name: Stündlicher Snapshot
+
+# Achtung: GitHub führt geplante Workflows ausschliesslich auf dem Default-Branch
+# aus. Der Cron greift also erst, wenn dieser Stand auf main liegt. Vorher lässt
+# sich der Lauf jederzeit von Hand über "Run workflow" auslösen.
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Zwei gleichzeitige Läufe würden sich beim Push gegenseitig überholen.
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Kurs und Wallet-Stand abholen
+        run: node scripts/snapshot.mjs
+
+      - name: Datenpunkt committen
+        run: |
+          if git diff --quiet -- data/history.json; then
+            echo "Keine Änderung — nichts zu committen."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/history.json
+          git commit -m "chore(data): Snapshot $(date -u '+%Y-%m-%d %H:00 UTC')"
+
+          # Ein paralleler Lauf oder ein Push von Hand kann uns zuvorgekommen sein.
+          for i in 1 2 3 4; do
+            if git push; then exit 0; fi
+            echo "Push fehlgeschlagen, hole nach und versuche es erneut ($i/4)…"
+            git pull --rebase origin "${GITHUB_REF_NAME}" || true
+            sleep $((2 ** i))
+          done
+          echo "Push nach vier Versuchen fehlgeschlagen." >&2
+          exit 1
