@@ -87,7 +87,25 @@ Hand gesetzt werden — beide kann kein Workflow selbst vornehmen:
 Der stündliche Cron läuft nur auf dem Default-Branch — Arbeitsstände auf einem Feature-Branch
 messen also nichts, bis sie in `main` sind.
 
-Die Seite steht unter `https://istagmbh.github.io/DR-Monetentracker/`.
+### Adresse
+
+Standard-Adresse: `https://istagmbh.github.io/DR-Monetentracker/`
+
+Eigene Domain: `https://moneten.drhome.ch` — dafür liegt die Datei `CNAME` im Repo-Wurzelverzeichnis.
+Nötig ist zusätzlich ein DNS-Eintrag bei der Verwaltung von `drhome.ch`:
+
+```
+Typ    CNAME
+Name   moneten
+Wert   istagmbh.github.io.
+```
+
+Nach dem ersten erfolgreichen Deploy im Repo unter **Settings → Pages** die Domain als
+*Custom domain* eintragen und **Enforce HTTPS** aktivieren, sobald das Zertifikat ausgestellt ist
+(dauert nach dem DNS-Eintrag meist einige Minuten).
+
+Alle Pfade in der Seite sind relativ, sie funktioniert deshalb unter beiden Adressen — unter
+`/DR-Monetentracker/` genauso wie direkt auf der Domainwurzel.
 
 ---
 
