@@ -173,8 +173,13 @@ export function series(entries, baseEntry, cur) {
  */
 export function computeState(data, { currency = 'chf', now = new Date() } = {}) {
   const cur = CURRENCIES.includes(currency) ? currency : 'chf';
-  const entries = normaliseEntries(data?.entries);
   const startAt = data?.startAt ? new Date(data.startAt) : null;
+
+  // Der Sammler läuft, sobald der Workflow steht — die Show beginnt aber erst
+  // zum Startschuss. Punkte davor sind Vorlauf und zählen nicht mit, sonst
+  // verschwindet der Countdown zu früh und "seit Start" verankert am falschen Tag.
+  const measured = normaliseEntries(data?.entries);
+  const entries = startAt ? measured.filter((e) => toTime(e.t) >= toTime(startAt)) : measured;
 
   if (!entries.length) {
     return {
