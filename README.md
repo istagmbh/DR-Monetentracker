@@ -71,15 +71,18 @@ Messpunkte vorliegen. Ohne echte Daten zeigt die Seite einen Countdown bis zum S
 
 ## Veröffentlichung
 
-Deployment über `.github/workflows/deploy-pages.yml`. Zwei Dinge müssen einmalig von Hand
-passieren:
+Deployment über `.github/workflows/deploy-pages.yml`. Die Pages-Seite legt `configure-pages`
+selbst an (`enablement: true`), der Einstellungsdialog ist also nicht nötig.
 
-1. **Settings → Pages → Source** auf **GitHub Actions** stellen.
-2. Den Branch nach `main` mergen — GitHub startet geplante Workflows nur auf dem Default-Branch,
-   der stündliche Cron greift also erst danach. Bis dahin lässt sich `Stündlicher Snapshot`
-   jederzeit von Hand über „Run workflow“ auslösen.
+Voraussetzung dafür — und für den Commit des stündlichen Snapshots — ist eine einzige
+Einstellung: unter **Settings → Actions → General → Workflow permissions** muss
+**Read and write permissions** aktiv sein. GitHub setzt neue Repos auf „read-only“, und die
+`permissions:`-Angaben in den Workflow-Dateien können dieses Repo-Limit nicht überschreiben.
 
-Danach steht die Seite unter `https://istagmbh.github.io/DR-Monetentracker/`.
+Der stündliche Cron läuft nur auf dem Default-Branch — Arbeitsstände auf einem Feature-Branch
+messen also nichts, bis sie in `main` sind.
+
+Die Seite steht unter `https://istagmbh.github.io/DR-Monetentracker/`.
 
 ---
 
