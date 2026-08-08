@@ -71,8 +71,9 @@ Messpunkte vorliegen. Ohne echte Daten zeigt die Seite einen Countdown bis zum S
 
 ## Veröffentlichung
 
-Deployment über `.github/workflows/deploy-pages.yml`. Zwei Einstellungen müssen einmalig von
-Hand gesetzt werden — beide kann kein Workflow selbst vornehmen:
+Deployment über `.github/workflows/deploy-pages.yml`. Zwei Einstellungen mussten einmalig von
+Hand gesetzt werden — beide kann kein Workflow selbst vornehmen; für dieses Repo sind sie
+erledigt und hier nur noch als Gedächtnisstütze festgehalten:
 
 1. **Settings → Pages → Source** auf **GitHub Actions**.
    Ohne das bricht `configure-pages` mit *„Get Pages site failed … Not Found“* ab. Der
@@ -100,9 +101,15 @@ Name   moneten
 Wert   istagmbh.github.io.
 ```
 
-Nach dem ersten erfolgreichen Deploy im Repo unter **Settings → Pages** die Domain als
-*Custom domain* eintragen und **Enforce HTTPS** aktivieren, sobald das Zertifikat ausgestellt ist
-(dauert nach dem DNS-Eintrag meist einige Minuten).
+Kein A-Record, keine IP: der Wert zeigt auf `istagmbh.github.io.`, nicht auf den Repo-Pfad — den
+stellt GitHub anhand der `CNAME`-Datei selbst her.
+
+Solange dieser Eintrag fehlt, ist die Seite **auch unter der Standard-Adresse nicht erreichbar**:
+Bei gesetzter Custom domain liefert GitHub ausschliesslich unter dieser aus und leitet
+`github.io` dorthin um. Wer die Seite ohne eigene Domain betreiben will, löscht `CNAME`.
+
+**Enforce HTTPS** unter *Settings → Pages* anhaken, sobald das Zertifikat ausgestellt ist (nach
+dem DNS-Eintrag meist einige Minuten).
 
 Alle Pfade in der Seite sind relativ, sie funktioniert deshalb unter beiden Adressen — unter
 `/DR-Monetentracker/` genauso wie direkt auf der Domainwurzel.
