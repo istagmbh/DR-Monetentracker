@@ -71,13 +71,18 @@ Messpunkte vorliegen. Ohne echte Daten zeigt die Seite einen Countdown bis zum S
 
 ## Veröffentlichung
 
-Deployment über `.github/workflows/deploy-pages.yml`. Die Pages-Seite legt `configure-pages`
-selbst an (`enablement: true`), der Einstellungsdialog ist also nicht nötig.
+Deployment über `.github/workflows/deploy-pages.yml`. Zwei Einstellungen müssen einmalig von
+Hand gesetzt werden — beide kann kein Workflow selbst vornehmen:
 
-Voraussetzung dafür — und für den Commit des stündlichen Snapshots — ist eine einzige
-Einstellung: unter **Settings → Actions → General → Workflow permissions** muss
-**Read and write permissions** aktiv sein. GitHub setzt neue Repos auf „read-only“, und die
-`permissions:`-Angaben in den Workflow-Dateien können dieses Repo-Limit nicht überschreiben.
+1. **Settings → Pages → Source** auf **GitHub Actions**.
+   Ohne das bricht `configure-pages` mit *„Get Pages site failed … Not Found“* ab. Der
+   Parameter `enablement: true` ist keine Abkürzung: das Anlegen der Seite verlangt
+   Repo-Admin-Rechte, die das `GITHUB_TOKEN` eines Workflows nie besitzt — der Versuch endet
+   mit *„Create Pages site failed. Resource not accessible by integration“*.
+2. **Settings → Actions → General → Workflow permissions** auf **Read and write permissions**.
+   Sonst darf der stündliche Snapshot seinen Datenpunkt nicht committen. GitHub setzt neue
+   Repos auf „read-only“, und die `permissions:`-Angaben in den Workflow-Dateien können dieses
+   Repo-Limit nicht überschreiben, nur unterschreiten.
 
 Der stündliche Cron läuft nur auf dem Default-Branch — Arbeitsstände auf einem Feature-Branch
 messen also nichts, bis sie in `main` sind.
