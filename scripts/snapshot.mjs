@@ -46,7 +46,12 @@ async function fetchText(url, { attempts = 3, timeoutMs = 20_000 } = {}) {
         signal: AbortSignal.timeout(timeoutMs),
         headers: { accept: 'text/csv,application/json', 'user-agent': 'dr-monetentracker/1.0' },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      if (!res.ok) {
+        // Der Anfang der Antwort steht im Protokoll — ein blosser Statuscode
+        // liess beim letzten Fehlschlag offen, ob Symbol, Pfad oder Sperre schuld war.
+        const koerper = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160);
+        throw new Error(`HTTP ${res.status} ${res.statusText}${koerper ? ` — ${koerper}` : ''}`);
+      }
       return await res.text();
     } catch (err) {
       lastError = err;
@@ -143,30 +148,80 @@ export function parseStooq(csv) {
 }
 
 /**
+ * Kurs und Notierungswährung aus der Chart-Antwort von Yahoo. Die Währung
+ * steht in der Antwort selbst — verlässlicher, als sie in der Konfiguration
+ * zu raten.
+ */
+export function parseYahoo(payload) {
+  const meta = payload?.chart?.result?.[0]?.meta;
+  const kurs = Number(meta?.regularMarketPrice ?? meta?.previousClose);
+  if (!Number.isFinite(kurs) || kurs <= 0) return null;
+  return { kurs, waehrung: String(meta?.currency || '').toUpperCase() || null };
+}
+
+/**
  * Alle Vergleichskurse in Franken. Der Dollarkurs kommt aus den beiden
  * Bitcoin-Notierungen — CHF je BTC geteilt durch USD je BTC ist der
  * USD/CHF-Kurs, ein zusätzlicher Aufruf erübrigt sich damit.
+ *
+ * Jedes Symbol wird einzeln geholt: Eine Sammelabfrage nimmt beim ersten
+ * unbekannten Symbol alle anderen mit ins Verderben — die erste Fassung
+ * scheiterte genau daran mit einem 404 für die ganze Liste.
  */
 async function loadAssets(prices) {
   const usdchf = prices.chf / prices.usd;
   const assets = {};
 
-  const stooqSymbole = Object.values(ASSETS)
-    .filter((a) => a.stooq)
-    .map((a) => a.stooq);
+  /** Rechnet einen Kurs anhand seiner Notierungswährung in Franken um. */
+  const inFranken = (kurs, waehrung) => {
+    if (waehrung === 'CHF') return kurs;
+    if (waehrung === 'USD') return kurs * usdchf;
+    if (waehrung === 'EUR') return kurs * (prices.chf / prices.eur);
+    return null;
+  };
 
-  if (stooqSymbole.length) {
-    try {
-      const csv = USE_FIXTURES
-        ? await readFile(join(FIXTURES, 'stooq.csv'), 'utf8')
-        : await fetchText(`https://stooq.com/q/l/?s=${stooqSymbole.map(encodeURIComponent).join('+')}&f=sd2t2c&h&e=csv`);
-      const kurse = parseStooq(csv);
-      for (const [key, meta] of Object.entries(ASSETS)) {
-        const roh = meta.stooq && kurse[meta.stooq.toLowerCase()];
-        if (roh) assets[key] = Math.round(roh * (meta.usd ? usdchf : 1) * 100) / 100;
+  for (const [key, meta] of Object.entries(ASSETS)) {
+    if (!meta.yahoo && !meta.stooq) continue;
+
+    if (USE_FIXTURES) {
+      const kurse = parseStooq(await readFile(join(FIXTURES, 'stooq.csv'), 'utf8'));
+      const roh = meta.stooq && kurse[meta.stooq.toLowerCase()];
+      if (roh) assets[key] = Math.round(inFranken(roh, meta.quote) * 100) / 100;
+      continue;
+    }
+
+    let franken = null;
+
+    if (meta.yahoo) {
+      try {
+        const payload = await fetchJson(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(meta.yahoo)}?interval=1d&range=1d`,
+          { attempts: 2 },
+        );
+        const gelesen = parseYahoo(payload);
+        if (gelesen) franken = inFranken(gelesen.kurs, gelesen.waehrung || meta.quote);
+      } catch (err) {
+        console.warn(`  ${key}: Yahoo nicht erreichbar (${err.message})`);
       }
-    } catch (err) {
-      console.warn(`  Vergleichskurse von Stooq nicht erreichbar: ${err.message}`);
+    }
+
+    if (franken === null && meta.stooq) {
+      try {
+        const csv = await fetchText(
+          `https://stooq.com/q/l/?s=${encodeURIComponent(meta.stooq)}&f=sd2t2c&h&e=csv`,
+          { attempts: 2 },
+        );
+        const roh = parseStooq(csv)[meta.stooq.toLowerCase()];
+        if (roh) franken = inFranken(roh, meta.quote);
+      } catch (err) {
+        console.warn(`  ${key}: Stooq nicht erreichbar (${err.message})`);
+      }
+    }
+
+    if (Number.isFinite(franken) && franken > 0) {
+      assets[key] = Math.round(franken * 100) / 100;
+    } else {
+      console.warn(`  ${key}: kein Kurs von einer der Quellen.`);
     }
   }
 
@@ -233,22 +288,51 @@ export function satsForGap(entries, hour) {
   return davor.sats === danach.sats ? davor.sats : null;
 }
 
+/**
+ * Wandelt die Antwort von /api/v1/historical-price in unsere drei Währungen.
+ *
+ * Wird die Abfrage auf eine Währung eingeschränkt, liefert die Quelle auch nur
+ * diese — genau daran scheiterte das Nachfüllen zuvor: Der Aufruf verlangte
+ * CHF, die Prüfung danach aber alle drei. Ohne Einschränkung kommt USD plus
+ * eine Tabelle der Wechselkurse, aus der sich der Rest ergibt.
+ */
+export function parseHistorical(payload) {
+  const eintrag = Array.isArray(payload?.prices) ? payload.prices[0] : payload;
+  if (!eintrag) return null;
+
+  const kurse = payload?.exchangeRates ?? {};
+  const usd = Number(eintrag.USD ?? eintrag.usd);
+  const usdchf = Number(kurse.USDCHF ?? kurse.usdchf);
+  const usdeur = Number(kurse.USDEUR ?? kurse.usdeur);
+
+  const out = {
+    usd,
+    chf: Number(eintrag.CHF ?? eintrag.chf ?? (usd > 0 && usdchf > 0 ? usd * usdchf : NaN)),
+    eur: Number(eintrag.EUR ?? eintrag.eur ?? (usd > 0 && usdeur > 0 ? usd * usdeur : NaN)),
+  };
+
+  if (!CURRENCIES.every((c) => Number.isFinite(out[c]) && out[c] > 0)) return null;
+  return {
+    chf: Math.round(out.chf * 100) / 100,
+    eur: Math.round(out.eur * 100) / 100,
+    usd: Math.round(out.usd * 100) / 100,
+  };
+}
+
 /** Historischer Bitcoin-Kurs zu einem Zeitpunkt, in allen drei Währungen. */
 async function historicalPrices(hour) {
   const stamp = Math.floor(new Date(hour).getTime() / 1000);
   const payload = await fetchJson(
-    `https://mempool.space/api/v1/historical-price?currency=CHF&timestamp=${stamp}`,
+    `https://mempool.space/api/v1/historical-price?timestamp=${stamp}`,
     { attempts: 2 },
   );
 
-  // Die Antwort trägt die Notierungen in `prices`, je Eintrag ein Zeitpunkt.
-  const eintrag = Array.isArray(payload?.prices) ? payload.prices[0] : payload;
-  const out = {
-    chf: Number(eintrag?.CHF ?? eintrag?.chf),
-    eur: Number(eintrag?.EUR ?? eintrag?.eur),
-    usd: Number(eintrag?.USD ?? eintrag?.usd),
-  };
-  return CURRENCIES.every((c) => Number.isFinite(out[c]) && out[c] > 0) ? out : null;
+  const out = parseHistorical(payload);
+  if (!out) {
+    // Damit der nächste Lauf nicht wieder raten muss, was zurückkam.
+    console.warn(`    unerwartete Antwortform: ${JSON.stringify(payload).slice(0, 200)}`);
+  }
+  return out;
 }
 
 async function backfill(entries, now) {
