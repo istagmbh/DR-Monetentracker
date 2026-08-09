@@ -9,6 +9,7 @@ import { ADDRESS, START_AT, DATA_URL, DEMO_URL, REFRESH_MS, QUOTE_MS, ASSETS, SA
 import { setOdometer } from './odometer.js';
 import { renderChart } from './chart.js';
 import { createQuoteDeck } from './quotes.js';
+import { pickLine } from './lines.js';
 
 const $ = (sel) => document.querySelector(sel);
 const isDemo = new URLSearchParams(location.search).has('demo');
@@ -61,43 +62,10 @@ const stampOf = (t) => dateTimeFmt.format(new Date(t));
 
 /* --- Sprüche ------------------------------------------------------------- */
 
-/** Kommentar des Hauses, abhängig von Richtung und Wucht der Bewegung. */
-function punchline(stats, display) {
-  if (display === 'btc') {
-    return 'In Bitcoin gerechnet hat er exakt nichts gewonnen. Genau deshalb rechnet man in Franken.';
-  }
+const stundeFmt = new Intl.DateTimeFormat('de-CH', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' });
 
-  const p = stats.hodlPct;
-  const lines = {
-    bigWin: [
-      'Nichtstun war heute die bestbezahlte Tätigkeit der Schweiz.',
-      'Er hat geschlafen und dabei mehr verdient als das halbe Grossraumbüro.',
-      'Die beste Anlagestrategie des Tages: Hände weg vom Gerät.',
-    ],
-    win: [
-      'Ein solider Tag für die Fraktion Hände-in-den-Taschen.',
-      'Faulheit zahlt sich aus. Heute jedenfalls.',
-    ],
-    flat: [
-      'Bewegung: keine der Rede wert.',
-      'Der Kurs steht so still, dass man die Uhr danach stellen könnte.',
-    ],
-    loss: [
-      'Hätte er um Mitternacht ausbezahlt, sässe er jetzt entspannter.',
-      'Kleiner Dämpfer. Der Abend ist jung.',
-    ],
-    bigLoss: [
-      'Um Punkt 00:00 auszahlen wäre die Idee des Tages gewesen.',
-      'Diese Zahl ersetzt jeden Kaffee.',
-      'Der Markt hat heute eine Meinung, und sie ist nicht schmeichelhaft.',
-    ],
-  };
-
-  const key = p > 0.03 ? 'bigWin' : p > 0.002 ? 'win' : p < -0.03 ? 'bigLoss' : p < -0.002 ? 'loss' : 'flat';
-  const pool = lines[key];
-  // Ueber die Stunde gestreut, damit der Spruch nicht bei jedem Rendern springt.
-  return pool[new Date().getHours() % pool.length];
-}
+/** Zürcher Stunde eines Zeitpunkts — massgeblich ist der Messpunkt, nicht die Uhr des Betrachters. */
+const zurichHour = (t) => Number(stundeFmt.format(new Date(t)));
 
 /* --- Rendern -------------------------------------------------------------- */
 
@@ -125,7 +93,7 @@ function renderHero(s) {
   badge.textContent = btc ? '±0.00 %' : pct(s.today.hodlPct);
 
   $('#hero-since').textContent = `seit ${clockOf(s.today.from)} · Stand ${clockOf(s.latest.t)}`;
-  $('#hero-punchline').textContent = punchline(s.today, state.display);
+  $('#hero-punchline').textContent = pickLine(s.today.hodlPct, zurichHour(s.latest.t), { btcMode: btc });
 }
 
 function renderCards(s) {
