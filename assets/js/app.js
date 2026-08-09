@@ -72,18 +72,24 @@ function punchline(stats, display) {
     bigWin: [
       'Nichtstun war heute die bestbezahlte Tätigkeit der Schweiz.',
       'Er hat geschlafen und dabei mehr verdient als das halbe Grossraumbüro.',
-      'Das Haus verneigt sich. Die Walzen haben alle drei gleich gezeigt.',
+      'Die beste Anlagestrategie des Tages: Hände weg vom Gerät.',
     ],
-    win: ['Ein solider Tag für die Fraktion Hände-in-den-Taschen.', 'Faulheit zahlt sich aus. Heute jedenfalls.'],
+    win: [
+      'Ein solider Tag für die Fraktion Hände-in-den-Taschen.',
+      'Faulheit zahlt sich aus. Heute jedenfalls.',
+    ],
     flat: [
-      'Bewegung: keine der Rede wert. Das Haus gähnt.',
-      'Der Kurs steht so still, dass die Glühbirnen sich langweilen.',
+      'Bewegung: keine der Rede wert.',
+      'Der Kurs steht so still, dass man die Uhr danach stellen könnte.',
     ],
-    loss: ['Hätte er um Mitternacht ausbezahlt, sässe er jetzt entspannter.', 'Kleiner Dämpfer. Der Abend ist jung.'],
+    loss: [
+      'Hätte er um Mitternacht ausbezahlt, sässe er jetzt entspannter.',
+      'Kleiner Dämpfer. Der Abend ist jung.',
+    ],
     bigLoss: [
       'Um Punkt 00:00 auszahlen wäre die Idee des Tages gewesen.',
-      'Das Haus bedankt sich für Ihren Beitrag zur Liquidität.',
-      'Ein Blick auf diese Zahl ersetzt jeden Kaffee.',
+      'Diese Zahl ersetzt jeden Kaffee.',
+      'Der Markt hat heute eine Meinung, und sie ist nicht schmeichelhaft.',
     ],
   };
 

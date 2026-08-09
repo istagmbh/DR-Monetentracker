@@ -22,8 +22,14 @@ export function renderChart(container, { points, formatValue, formatTime, showAc
 
   // Auf schmalen Schirmen wird die Zeichenfläche höher und die Schrift grösser,
   // sonst schrumpft die Beschriftung beim Herunterskalieren zu Staub.
-  const narrow = (container.clientWidth || 1000) < 620;
-  const H = narrow ? 620 : 320;
+  const cw = container.clientWidth || 1000;
+  const narrow = cw < 620;
+
+  // Das Seitenverhältnis ist fest, die Höhe wüchse also mit der Breite mit —
+  // auf einem breiten Schirm wären das über 500px. Deshalb aus der gewünschten
+  // Bildschirmhöhe zurückgerechnet.
+  const zielHoehe = Math.min(420, Math.max(240, cw * 0.3));
+  const H = narrow ? 620 : Math.round((1000 * zielHoehe) / cw);
   const PAD = narrow
     ? { top: 26, right: 18, bottom: 74, left: 132 }
     : { top: 22, right: 18, bottom: 34, left: 78 };
@@ -64,10 +70,17 @@ export function renderChart(container, { points, formatValue, formatTime, showAc
     );
   }
 
-  // Zeitachse: wenige Beschriftungen, sonst wird es Brei.
+  // Zeitachse: wenige Beschriftungen, sonst wird es Brei. Die Stützstellen
+  // werden über die Zeit gleichmässig verteilt und dann auf den nächstgelegenen
+  // Messpunkt gerundet — nach Index gewählt rückten sie bei Lücken in der Reihe
+  // aufeinander und überlappten ("00:0001:00").
   const tickCount = Math.min(narrow ? 4 : 6, points.length);
+  const seen = new Set();
   const ticks = Array.from({ length: tickCount }, (_, i) => {
-    const p = points[Math.round((i * (points.length - 1)) / (tickCount - 1 || 1))];
+    const ziel = t0 + (i / Math.max(tickCount - 1, 1)) * spanT;
+    const p = points.reduce((a, b) => (Math.abs(b.t - ziel) < Math.abs(a.t - ziel) ? b : a));
+    if (seen.has(p.t)) return '';
+    seen.add(p.t);
     // Die Randbeschriftungen nach innen ziehen, damit sie nicht abgeschnitten werden.
     const anchor = i === 0 ? 'start' : i === tickCount - 1 ? 'end' : 'middle';
     return `<text x="${x(p.t).toFixed(1)}" y="${H - PAD.bottom + fontSize * 1.6}" class="xlab" text-anchor="${anchor}">${formatTime(p.t)}</text>`;
@@ -80,23 +93,19 @@ export function renderChart(container, { points, formatValue, formatTime, showAc
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Verlauf des Wallet-Werts">
       <defs>
         <linearGradient id="fillGold" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#ffd54a" stop-opacity="0.32" />
-          <stop offset="100%" stop-color="#ffd54a" stop-opacity="0" />
+          <stop offset="0%" stop-color="#ffa028" stop-opacity="0.22" />
+          <stop offset="100%" stop-color="#ffa028" stop-opacity="0" />
         </linearGradient>
-        <filter id="glow" x="-20%" y="-40%" width="140%" height="180%">
-          <feGaussianBlur stdDeviation="5" result="b" />
-          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
         <style>
-          .grid { stroke: rgba(255,255,255,.08); stroke-width: ${strokeScale}; }
-          .ylab { fill: #a58ec7; font-size: ${fontSize}px; text-anchor: end; font-family: ui-monospace, Menlo, monospace; }
-          .xlab { fill: #a58ec7; font-size: ${fontSize}px; font-family: ui-monospace, Menlo, monospace; }
-          .midline { stroke: #ffd54a; stroke-width: ${1.5 * strokeScale}; stroke-dasharray: ${6 * strokeScale} ${7 * strokeScale}; opacity: .5; }
-          .line-hodl { fill: none; stroke: #ffd54a; stroke-width: ${3.5 * strokeScale}; stroke-linejoin: round; stroke-linecap: round; }
-          .line-actual { fill: none; stroke: #00e5ff; stroke-width: ${2.5 * strokeScale}; stroke-linejoin: round; stroke-linecap: round; opacity: .95; }
-          .cross { stroke: rgba(255,255,255,.45); stroke-width: ${strokeScale}; }
-          .dot-hodl { fill: #ffd54a; }
-          .dot-actual { fill: #00e5ff; }
+          .grid { stroke: rgba(255,255,255,.07); stroke-width: ${strokeScale}; }
+          .ylab { fill: #7c8798; font-size: ${fontSize}px; text-anchor: end; font-family: ui-monospace, Menlo, monospace; }
+          .xlab { fill: #7c8798; font-size: ${fontSize}px; font-family: ui-monospace, Menlo, monospace; }
+          .midline { stroke: #7c8798; stroke-width: ${strokeScale}; stroke-dasharray: ${4 * strokeScale} ${5 * strokeScale}; opacity: .6; }
+          .line-hodl { fill: none; stroke: #ffa028; stroke-width: ${2 * strokeScale}; stroke-linejoin: round; stroke-linecap: round; }
+          .line-actual { fill: none; stroke: #58a6ff; stroke-width: ${1.6 * strokeScale}; stroke-linejoin: round; stroke-linecap: round; }
+          .cross { stroke: rgba(255,255,255,.35); stroke-width: ${strokeScale}; stroke-dasharray: ${3 * strokeScale} ${3 * strokeScale}; }
+          .dot-hodl { fill: #ffa028; }
+          .dot-actual { fill: #58a6ff; }
         </style>
       </defs>
 
@@ -104,7 +113,7 @@ export function renderChart(container, { points, formatValue, formatTime, showAc
       <line class="midline" x1="${PAD.left}" x2="${W - PAD.right}" y1="${baseY.toFixed(1)}" y2="${baseY.toFixed(1)}" />
       <path d="${area}" fill="url(#fillGold)" />
       ${showActual ? `<path class="line-actual" d="${path(actualPts)}" />` : ''}
-      <path class="line-hodl" d="${path(hodlPts)}" filter="url(#glow)" />
+      <path class="line-hodl" d="${path(hodlPts)}" />
       ${ticks}
 
       <g id="cursor" opacity="0">

@@ -3,140 +3,148 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Dr. Monetentracker — die grosse Mitternachtsfrage</title>
+    <title>Dr. Monetentracker — Mitternachts-Terminal</title>
     <meta
       name="description"
-      content="Stündliche Ueberwachung einer Bitcoin-Wallet mit der einzig wahren Frage: Was wäre, wenn er um Punkt 00:00 weder ein- noch ausbezahlt hätte?"
+      content="Stündliche Überwachung einer Bitcoin-Wallet mit der einzig wahren Frage: Was wäre, wenn er um Punkt 00:00 weder ein- noch ausbezahlt hätte?"
     />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0a0410" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B0%3C/text%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#07090d" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
     <link rel="stylesheet" href="assets/css/style.css" />
   </head>
 
   <body>
-    <div class="stage-lights" aria-hidden="true"></div>
-    <div class="scanlines" aria-hidden="true"></div>
-
     <a class="skip-link" href="#hauptinhalt">Zum Inhalt springen</a>
 
-    <header class="marquee">
-      <div class="bulbs" aria-hidden="true"></div>
-      <p class="marquee__kicker">Rund um die Uhr · Stündlich frisch gezapft</p>
-      <h1 class="logo">
-        <span class="logo__dr">Dr.</span>
-        <span class="logo__main" data-text="Monetentracker">Monetentracker</span>
-      </h1>
-      <p class="marquee__tagline">
-        Das einzige Casino, in dem der Gast nichts tun muss und trotzdem gewinnt. Oder verliert.
-      </p>
-      <div class="chips">
-        <span class="chip chip--addr" title="Beobachtete Wallet">
-          <span class="chip__label">Wallet</span>
-          <code id="chip-address">bc1q4cek…xut6z</code>
-        </span>
-        <span class="chip chip--live" id="chip-live">
-          <span class="pulse" aria-hidden="true"></span>
-          <span id="chip-live-text">Verbinde mit dem Tresor…</span>
-        </span>
+    <!-- Kopfleiste im Terminal-Stil -->
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true"></span>
+          <span class="brand__name">DR. MONETENTRACKER</span>
+          <span class="brand__ticker">BTC/CHF</span>
+        </div>
+
+        <div class="topbar__meta">
+          <span class="chip chip--addr" title="Beobachtete Wallet">
+            <span class="chip__label">Wallet</span>
+            <code id="chip-address">bc1q4cek…xut6z</code>
+          </span>
+          <span class="chip chip--live" id="chip-live">
+            <span class="pulse" aria-hidden="true"></span>
+            <span id="chip-live-text">Verbinde mit dem Tresor…</span>
+          </span>
+        </div>
       </div>
     </header>
 
+    <!-- Persönliches Banner -->
+    <aside class="banner" aria-label="Nachricht">
+      <div class="banner__rule" aria-hidden="true"></div>
+      <p class="banner__text">Alles Gute und danke für den schönen Abend</p>
+      <div class="banner__rule" aria-hidden="true"></div>
+    </aside>
+
     <main id="hauptinhalt">
-      <!-- Wartezustand bis zum Startschuss am 09.08. um 00:00 -->
-      <section class="countdown" id="countdown" hidden>
-        <p class="countdown__kicker">Die Show beginnt</p>
-        <h2 class="countdown__title">Vorhang um Punkt 00:00</h2>
+      <!-- Wartezustand bis zum Startschuss -->
+      <section class="panel countdown" id="countdown" hidden>
+        <p class="label">Handelsbeginn</p>
+        <h2 class="countdown__title">Eröffnung um Punkt 00:00</h2>
         <div class="countdown__clock" id="countdown-clock" role="timer" aria-live="off"></div>
         <p class="countdown__note" id="countdown-note">
-          Ab dem 9. August zählt der Tracker stündlich mit. Bis dahin poliert das Haus die Jetons.
+          Ab dem 9. August zählt der Tracker stündlich mit.
         </p>
         <p class="countdown__demo">
-          Ungeduldig? <a href="?demo=1">Vorschau mit erfundenen Zahlen ansehen</a>.
+          <a href="?demo=1">Vorschau mit erfundenen Zahlen ansehen</a>
         </p>
       </section>
 
       <div id="app" hidden>
-        <!-- Die Hauptzahl -->
-        <section class="hero" id="hero">
-          <div class="hero__frame">
-            <p class="hero__kicker">Die grosse Frage</p>
-            <h2 class="hero__question" id="hero-question">
-              Hätte er heute um Punkt 00:00 weder ein- noch ausbezahlt, dann hätte er jetzt
-            </h2>
-
-            <div class="odometer" id="hero-odometer" role="status" aria-live="polite" aria-atomic="true"></div>
-
-            <div class="hero__meta">
-              <span class="badge" id="hero-pct">±0.00 %</span>
-              <span class="hero__since" id="hero-since">seit Mitternacht</span>
-            </div>
-
-            <p class="hero__punchline" id="hero-punchline"></p>
-
+        <!-- Hauptkennzahl -->
+        <section class="panel hero" id="hero">
+          <header class="panel__head">
+            <h2 class="label label--accent">Mitternachts-Ergebnis</h2>
             <div class="switch" role="group" aria-label="Währung wählen">
               <button type="button" class="switch__btn is-active" data-currency="chf">CHF</button>
               <button type="button" class="switch__btn" data-currency="eur">EUR</button>
               <button type="button" class="switch__btn" data-currency="usd">USD</button>
-              <button type="button" class="switch__btn" data-currency="btc">₿</button>
+              <button type="button" class="switch__btn" data-currency="btc">BTC</button>
+            </div>
+          </header>
+
+          <div class="hero__main">
+            <div class="hero__body">
+              <div class="odometer" id="hero-odometer" role="status" aria-live="polite" aria-atomic="true"></div>
+              <div class="hero__side">
+                <span class="delta" id="hero-pct">±0.00 %</span>
+                <span class="hero__since" id="hero-since">seit Mitternacht</span>
+              </div>
+            </div>
+
+            <div class="hero__text">
+              <p class="hero__question" id="hero-question">
+                Hätte er heute um Punkt 00:00 weder ein- noch ausbezahlt, dann stünde er jetzt bei
+              </p>
+              <p class="hero__punchline" id="hero-punchline"></p>
             </div>
           </div>
         </section>
 
-        <!-- Kennzahlen -->
-        <section class="cards" aria-label="Kennzahlen">
-          <article class="card card--wide">
-            <h3 class="card__title">Wert im Tresor</h3>
-            <p class="card__value" id="card-value">—</p>
-            <p class="card__note" id="card-value-note"></p>
+        <!-- Kennzahlen als Datenraster -->
+        <section class="grid" aria-label="Kennzahlen">
+          <article class="cell">
+            <h3 class="label">Wert im Tresor</h3>
+            <p class="cell__value" id="card-value">—</p>
+            <p class="cell__note" id="card-value-note"></p>
           </article>
 
-          <article class="card">
-            <h3 class="card__title">Bestand</h3>
-            <p class="card__value" id="card-balance">—</p>
-            <p class="card__note" id="card-balance-note"></p>
+          <article class="cell">
+            <h3 class="label">Bestand</h3>
+            <p class="cell__value" id="card-balance">—</p>
+            <p class="cell__note" id="card-balance-note"></p>
           </article>
 
-          <article class="card">
-            <h3 class="card__title">Kurs</h3>
-            <p class="card__value" id="card-price">—</p>
-            <p class="card__note" id="card-price-note"></p>
+          <article class="cell">
+            <h3 class="label">Kurs</h3>
+            <p class="cell__value" id="card-price">—</p>
+            <p class="cell__note" id="card-price-note"></p>
           </article>
 
-          <article class="card">
-            <h3 class="card__title">Seit dem Startschuss</h3>
-            <p class="card__value" id="card-total">—</p>
-            <p class="card__note" id="card-total-note"></p>
+          <article class="cell">
+            <h3 class="label">Seit Handelsbeginn</h3>
+            <p class="cell__value" id="card-total">—</p>
+            <p class="cell__note" id="card-total-note"></p>
           </article>
 
-          <article class="card card--win">
-            <h3 class="card__title">Beste Stunde</h3>
-            <p class="card__value" id="card-best">—</p>
-            <p class="card__note" id="card-best-note"></p>
+          <article class="cell">
+            <h3 class="label">Beste Stunde</h3>
+            <p class="cell__value" id="card-best">—</p>
+            <p class="cell__note" id="card-best-note"></p>
           </article>
 
-          <article class="card card--loss">
-            <h3 class="card__title">Schwächste Stunde</h3>
-            <p class="card__value" id="card-worst">—</p>
-            <p class="card__note" id="card-worst-note"></p>
+          <article class="cell">
+            <h3 class="label">Schwächste Stunde</h3>
+            <p class="cell__value" id="card-worst">—</p>
+            <p class="cell__note" id="card-worst-note"></p>
           </article>
 
-          <article class="card card--wide card--move" id="card-move" hidden>
-            <h3 class="card__title">Die Zappelei-Abrechnung</h3>
-            <p class="card__value" id="card-move-value">—</p>
-            <p class="card__note" id="card-move-note"></p>
+          <article class="cell cell--full" id="card-move" hidden>
+            <h3 class="label">Effekt der Ein- und Auszahlungen</h3>
+            <p class="cell__value" id="card-move-value">—</p>
+            <p class="cell__note" id="card-move-note"></p>
           </article>
         </section>
 
         <!-- Verlauf -->
-        <section class="panel" aria-label="Verlauf">
-          <div class="panel__head">
-            <h3 class="panel__title">Der Verlauf</h3>
-            <div class="switch switch--sm" role="group" aria-label="Zeitraum wählen">
+        <section class="panel">
+          <header class="panel__head">
+            <h3 class="label label--accent">Verlauf</h3>
+            <div class="switch" role="group" aria-label="Zeitraum wählen">
               <button type="button" class="switch__btn is-active" data-range="today">Heute</button>
               <button type="button" class="switch__btn" data-range="all">Seit Start</button>
             </div>
-          </div>
+          </header>
           <div class="chart" id="chart"></div>
           <div class="legend">
             <span class="legend__item legend__item--hodl">Unangetastet seit 00:00</span>
@@ -145,36 +153,33 @@
         </section>
       </div>
 
-      <!-- Filmzitate laufen unabhängig von den Daten -->
-      <section class="quote" aria-label="Zufälliges Filmzitat">
-        <div class="quote__reel" aria-hidden="true"></div>
-        <div class="quote__body">
-          <p class="quote__kicker">Was das Kino dazu sagt</p>
+      <!-- Filmzitat als Laufband -->
+      <section class="tape quote" aria-label="Zufälliges Filmzitat">
+        <span class="tape__label">Tape</span>
+        <div class="tape__body">
           <blockquote id="quote-text" aria-live="polite">…</blockquote>
-          <p class="quote__cite" id="quote-cite"></p>
-          <button type="button" class="btn" id="quote-next">Nochmal!</button>
+          <p class="tape__cite" id="quote-cite"></p>
         </div>
-        <div class="quote__reel" aria-hidden="true"></div>
+        <button type="button" class="btn" id="quote-next">Nächstes</button>
       </section>
 
-      <details class="explain">
-        <summary>Wie das Haus rechnet</summary>
+      <details class="explain panel">
+        <summary>Rechenweg</summary>
         <div class="explain__body">
           <p>
-            Jede Stunde wird der Bestand der Wallet und der Bitcoin-Kurs festgehalten. Der Bezugspunkt
-            ist der Stand um <strong>Punkt 00:00 Zürcher Zeit</strong>.
+            Jede Stunde werden Bestand und Kurs festgehalten. Bezugspunkt ist der Stand um
+            <strong>Punkt 00:00 Zürcher Zeit</strong>.
           </p>
           <p>
-            Die grosse Zahl oben ist der Mitternachts-Bestand, bewertet zum aktuellen Kurs, minus
-            seinen Wert um Mitternacht — also genau das, was passiert wäre, wenn um 00:00 weder ein-
-            noch ausbezahlt worden wäre. Das ist zugleich die Antwort auf die Frage
-            <em>„hätte er um 00:00 ausbezahlt“</em>: der Erlös um Mitternacht steht fest, derselbe
-            Bestand ist jetzt mehr oder weniger wert, und die Differenz ist dieselbe Zahl.
+            Die Hauptzahl ist der Mitternachts-Bestand zum aktuellen Kurs, minus seinen Wert um
+            Mitternacht — also genau das, was passiert wäre, wenn um 00:00 weder ein- noch
+            ausbezahlt worden wäre. Das ist zugleich die Antwort auf <em>„hätte er um 00:00
+            ausbezahlt“</em>: Der Erlös um Mitternacht steht fest, derselbe Bestand ist jetzt mehr
+            oder weniger wert, und die Differenz ist dieselbe Zahl.
           </p>
           <p>
-            Bewegt sich der Bestand zwischendurch, wandert dieser Effekt in die
-            <strong>Zappelei-Abrechnung</strong> — so bleibt der Kursgewinn sauber vom Ein- und
-            Auszahlen getrennt.
+            Bewegt sich der Bestand zwischendurch, wandert dieser Effekt in eine eigene Zeile — so
+            bleibt der Kursgewinn sauber vom Ein- und Auszahlen getrennt.
           </p>
         </div>
       </details>
@@ -183,11 +188,9 @@
     <footer class="foot">
       <p>
         Daten von <a href="https://mempool.space" rel="noopener noreferrer" target="_blank">mempool.space</a>,
-        stündlich eingesammelt. Kein Finanzrat, kein Anlagetipp — reine Unterhaltung.
+        stündlich eingesammelt. Kein Finanzrat, kein Anlagetipp.
       </p>
-      <p class="foot__small">
-        Zahlen können lügen, Filmzitate nie. <span id="foot-updated"></span>
-      </p>
+      <p class="foot__small"><span id="foot-updated"></span></p>
     </footer>
 
     <script type="module" src="assets/js/app.js"></script>

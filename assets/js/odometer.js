@@ -61,7 +61,9 @@ export function setOdometer(el, text, { animate = true } = {}) {
   const apply = () => {
     digits.forEach((d, i) => {
       const strip = reels[i];
-      if (strip) strip.style.transform = `translateY(${-Number(d) * 1.12}em)`;
+      // In Prozent der Streifenhöhe: der Streifen trägt genau zehn Ziffern,
+      // eine ist also ein Zehntel. So bleibt die Zeilenhöhe allein Sache des CSS.
+      if (strip) strip.style.transform = `translateY(${-Number(d) * 10}%)`;
     });
   };
 
