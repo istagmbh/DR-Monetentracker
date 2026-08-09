@@ -5,7 +5,7 @@
  */
 
 import { computeState, formatAxisNumber, TZ } from './calc.js';
-import { ADDRESS, START_AT, DATA_URL, DEMO_URL, REFRESH_MS, QUOTE_MS } from './config.js';
+import { ADDRESS, START_AT, DATA_URL, DEMO_URL, REFRESH_MS, QUOTE_MS, ASSETS, SAVINGS_RATE } from './config.js';
 import { setOdometer } from './odometer.js';
 import { renderChart } from './chart.js';
 import { createQuoteDeck } from './quotes.js';
@@ -180,6 +180,66 @@ function renderCards(s) {
   }
 }
 
+/**
+ * Die Rangliste stellt Bitcoin neben die Anlagen, in die er um Mitternacht
+ * hätte umschichten können. Bitcoin selbst kommt aus derselben Rechnung wie
+ * die Hauptzahl, damit beide nie auseinanderlaufen.
+ */
+function renderComparison(s) {
+  const panel = $('#compare');
+  const rows = s.comparison ?? [];
+
+  // Ohne Vergleichskurse in den Daten hat die Tafel nichts zu zeigen.
+  const echte = rows.filter((r) => !r.always);
+  panel.hidden = echte.length === 0;
+  if (panel.hidden) return;
+
+  const alle = [
+    ...rows,
+    { key: 'btc', name: 'Bitcoin (unangetastet)', pct: s.today.hodlPct, delta: s.today.hodlDelta, self: true },
+  ].sort((a, b) => b.pct - a.pct);
+
+  const liste = $('#compare-rows');
+  liste.textContent = '';
+
+  alle.forEach((r, i) => {
+    const li = document.createElement('li');
+    li.className = `rank${r.self ? ' rank--self' : ''}`;
+
+    const pos = document.createElement('span');
+    pos.className = 'rank__pos';
+    pos.textContent = r.closed ? '—' : `${i + 1}.`;
+
+    const name = document.createElement('span');
+    name.className = 'rank__name';
+    name.textContent = r.name;
+
+    const proz = document.createElement('span');
+    const betrag = document.createElement('span');
+
+    if (r.closed) {
+      proz.className = 'rank__closed';
+      proz.textContent = 'Markt geschlossen';
+      betrag.className = 'rank__delta';
+      betrag.textContent = '—';
+    } else {
+      proz.className = 'rank__pct';
+      proz.textContent = pct(r.pct);
+      setTone(proz, r.delta);
+      betrag.className = 'rank__delta';
+      betrag.textContent = signed(r.delta, { currency: 'chf' });
+    }
+
+    li.append(pos, name, proz, betrag);
+    liste.append(li);
+  });
+
+  $('.compare__hint').textContent =
+    s.comparisonHours >= 1
+      ? `seit Mitternacht · ${Math.round(s.comparisonHours)} h`
+      : 'seit Mitternacht';
+}
+
 function renderChartPanel(s) {
   const points = state.range === 'today' ? s.chartToday : s.chart;
   const long = state.range === 'all';
@@ -202,7 +262,11 @@ function renderLive(s) {
 }
 
 function render() {
-  const s = computeState(state.data, { currency: dataCurrency(state.display) });
+  const s = computeState(state.data, {
+    currency: dataCurrency(state.display),
+    assets: ASSETS,
+    savingsRate: SAVINGS_RATE,
+  });
 
   $('#countdown').hidden = s.hasData;
   $('#app').hidden = !s.hasData;
@@ -218,6 +282,7 @@ function render() {
 
   renderHero(s);
   renderCards(s);
+  renderComparison(s);
   renderChartPanel(s);
   renderLive(s);
 }

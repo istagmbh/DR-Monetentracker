@@ -14,8 +14,9 @@ import {
   zurichDayKey,
   normaliseEntries,
   formatAxisNumber,
+  assetComparison,
 } from '../assets/js/calc.js';
-import { hourKey, upsert, downsample } from './snapshot.mjs';
+import { hourKey, upsert, downsample, parseStooq, missingHours, satsForGap } from './snapshot.mjs';
 
 let passed = 0;
 const test = (name, fn) => {
@@ -223,6 +224,111 @@ test('downsample behält frische Stunden und je einen alten Tagespunkt', () => {
     out.map((e) => e.t),
     ['2026-08-08T22:00:00Z', '2026-08-09T22:00:00Z', '2026-11-30T22:00:00Z', '2026-12-01T11:00:00Z'],
   );
+});
+
+console.log('Anlagenvergleich');
+
+const VERGLEICH = { gold: { name: 'Gold' }, smi: { name: 'SMI' } };
+
+const mitKursen = (t, sats, chf, assets) => ({ ...entry(t, sats, chf), assets });
+
+test('Umschichtung wird auf den Mitternachtswert gerechnet', () => {
+  const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { gold: 5000, smi: 12_000 });
+  const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 49_000, { gold: 5100, smi: 12_000 });
+  const rows = assetComparison(base, jetzt, { valueMid: 50_000, assets: VERGLEICH });
+
+  const gold = rows.find((r) => r.key === 'gold');
+  near(gold.pct, 0.02); // 5000 -> 5100
+  near(gold.delta, 1000); // 2 % von 50'000
+  assert.equal(gold.closed, false);
+});
+
+test('ein über Stunden unveränderter Index gilt als geschlossen', () => {
+  const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { smi: 12_000 });
+  const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 49_000, { smi: 12_000 });
+  const smi = assetComparison(base, jetzt, { valueMid: 50_000, assets: VERGLEICH }).find((r) => r.key === 'smi');
+  assert.equal(smi.closed, true);
+});
+
+test('Anlagen ohne Kurs fallen still heraus', () => {
+  const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { gold: 5000 });
+  const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 49_000, {});
+  assert.equal(assetComparison(base, jetzt, { valueMid: 50_000, assets: VERGLEICH }).length, 0);
+});
+
+test('das Sparkonto verzinst anteilig und steht immer da', () => {
+  const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, {});
+  const rows = assetComparison(base, base, { valueMid: 50_000, assets: {}, savingsRate: 0.0075, hours: 8760 });
+  near(rows[0].pct, 0.0075);
+  near(rows[0].delta, 375);
+});
+
+test('die Rangliste ist nach Rendite sortiert', () => {
+  const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { gold: 100, smi: 100 });
+  const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 50_000, { gold: 90, smi: 110 });
+  const rows = assetComparison(base, jetzt, { valueMid: 50_000, assets: VERGLEICH });
+  assert.deepEqual(rows.map((r) => r.key), ['smi', 'gold']);
+});
+
+console.log('Vergleichskurse einlesen');
+
+test('Stooq-CSV wird gelesen, N/D-Zeilen fallen weg', () => {
+  const csv = [
+    'Symbol,Date,Time,Close',
+    'XAUUSD,2026-08-09,03:58:12,3421.55',
+    '^SMI,2026-08-08,17:30:00,12040.50',
+    '^SPX,N/D,N/D,N/D',
+  ].join('\n');
+  const kurse = parseStooq(csv);
+  assert.equal(kurse.xauusd, 3421.55);
+  assert.equal(kurse['^smi'], 12040.5);
+  assert.equal('^spx' in kurse, false);
+});
+
+test('leere oder kaputte Antworten ergeben keine Kurse', () => {
+  assert.deepEqual(parseStooq(''), {});
+  assert.deepEqual(parseStooq('völlig anderes Format'), {});
+});
+
+console.log('Lückenfüllung');
+
+const reiheMitLoch = [
+  entry('2026-08-09T00:00:00Z', 462_029, 52_449),
+  entry('2026-08-09T02:00:00Z', 462_029, 52_349),
+  entry('2026-08-09T04:00:00Z', 462_029, 52_342),
+];
+
+test('fehlende Stunden werden erkannt', () => {
+  assert.deepEqual(missingHours(reiheMitLoch, new Date('2026-08-09T05:10:00Z')), [
+    '2026-08-09T01:00:00Z',
+    '2026-08-09T03:00:00Z',
+  ]);
+});
+
+test('ohne Lücke gibt es nichts nachzufüllen', () => {
+  const dicht = [entry('2026-08-09T00:00:00Z', 1, 1), entry('2026-08-09T01:00:00Z', 1, 1)];
+  assert.deepEqual(missingHours(dicht, new Date('2026-08-09T02:00:00Z')), []);
+});
+
+test('der Nachfüllzeitraum ist begrenzt', () => {
+  // Ohne Begrenzung wären es über 1600 Stunden zurück bis zum 1. Juni.
+  const alt = [entry('2026-06-01T00:00:00Z', 1, 1), entry('2026-08-09T04:00:00Z', 1, 1)];
+  assert.deepEqual(missingHours(alt, new Date('2026-08-09T05:00:00Z'), 3), [
+    '2026-08-09T02:00:00Z',
+    '2026-08-09T03:00:00Z',
+  ]);
+});
+
+test('bei unverändertem Bestand ist die Lücke füllbar', () => {
+  assert.equal(satsForGap(reiheMitLoch, '2026-08-09T01:00:00Z'), 462_029);
+});
+
+test('bewegte sich der Bestand, bleibt die Lücke offen', () => {
+  const bewegt = [
+    entry('2026-08-09T00:00:00Z', 462_029, 52_449),
+    entry('2026-08-09T02:00:00Z', 300_000, 52_349),
+  ];
+  assert.equal(satsForGap(bewegt, '2026-08-09T01:00:00Z'), null);
 });
 
 console.log(`\n${passed} Prüfungen bestanden${process.exitCode ? ' — mit Fehlern' : ''}`);

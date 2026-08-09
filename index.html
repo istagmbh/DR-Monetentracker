@@ -10,7 +10,17 @@
     />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#07090d" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
+    <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="assets/icons/icon-192.png" sizes="192x192" />
+
+    <!-- Auf den Homescreen legbar: iOS liest apple-touch-icon, alles andere das Manifest. -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Moneten" />
+
     <link rel="stylesheet" href="assets/css/style.css" />
   </head>
 
@@ -137,6 +147,19 @@
             <p class="cell__value" id="card-move-value">—</p>
             <p class="cell__note" id="card-move-note"></p>
           </article>
+        </section>
+
+        <!-- Was, wenn er um 00:00 umgeschichtet hätte -->
+        <section class="panel compare" id="compare" hidden>
+          <header class="panel__head">
+            <h3 class="label label--accent">Umgeschichtet um 00:00</h3>
+            <p class="compare__hint">Rangliste seit Mitternacht</p>
+          </header>
+          <ol class="ranks" id="compare-rows"></ol>
+          <p class="compare__foot">
+            Gerechnet auf den Mitternachtswert des Bestands. Was ein geschlossener Markt
+            über Nacht getan hätte, weiss niemand — solche Zeilen stehen ohne Zahl da.
+          </p>
         </section>
 
         <!-- Verlauf -->
