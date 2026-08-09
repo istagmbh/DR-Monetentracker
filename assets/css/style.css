@@ -43,6 +43,9 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  /* Quer gehaltene Telefone schieben den Inhalt sonst unter die Kamera-Insel. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   background: var(--night);
   color: var(--ink);
   font-family: var(--font-body);
@@ -50,6 +53,8 @@ body {
   line-height: 1.6;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* --- Bühnenlicht: farbige Scheinwerfer und ein Hauch Filz ---------------- */
@@ -539,7 +544,7 @@ a {
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
 }
 
 .switch__btn:hover {
@@ -813,7 +818,7 @@ a {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-size: 0.74rem;
-  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
 }
 
 .btn:hover {
@@ -855,6 +860,7 @@ a {
 .foot {
   width: var(--shell);
   margin: 2rem auto 3rem;
+  margin-bottom: calc(3rem + env(safe-area-inset-bottom));
   text-align: center;
   color: var(--muted);
   font-size: 0.82rem;
@@ -875,14 +881,49 @@ a {
     --shell: calc(100% - 1.6rem);
   }
 
+  /* Zwei Spalten halbieren die Seitenlänge. Damit die Beträge dabei nicht
+     umbrechen, sinken Innenabstand und Schriftgrad der Zahl mit. */
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+
+  .card {
+    padding: 0.95rem 0.85rem;
+  }
+
   .card--wide {
     grid-column: span 1;
   }
 
-  /* Eine Spalte: zweispaltig müsste man die Zahlen umbrechen, und
-     abgeschnittene Beträge sind schlimmer als eine längere Seite. */
-  .cards {
-    grid-template-columns: 1fr;
+  /* Die Zappelei-Abrechnung trägt einen ganzen Satz — die bleibt breit. */
+  .card--move {
+    grid-column: span 2;
+  }
+
+  .card__title {
+    letter-spacing: 0.16em;
+  }
+
+  .card__value {
+    font-size: clamp(1rem, 4.7vw, 1.35rem);
+  }
+
+  .card__note {
+    font-size: 0.76rem;
+  }
+
+  /* Kopf und Hauptzahl dürfen auf dem Handy enger sitzen. */
+  .marquee {
+    padding: 1.6rem 1rem;
+  }
+
+  .marquee__kicker {
+    letter-spacing: 0.28em;
+  }
+
+  .hero__frame {
+    padding: 1.5rem 1rem 1.8rem;
   }
 
   .quote {
@@ -893,9 +934,54 @@ a {
     justify-content: center;
   }
 
-  .marquee__kicker {
-    letter-spacing: 0.28em;
+  .legend {
+    gap: 0.9rem;
+    justify-content: center;
   }
+}
+
+/* Unter dieser Breite reicht der Platz für zwei Spalten nicht mehr, ohne den
+   Bitcoin-Bestand umzubrechen — abgeschnittene Beträge wären schlimmer als
+   eine längere Seite. */
+@media (max-width: 359px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  .card--move {
+    grid-column: span 1;
+  }
+}
+
+/* --- Fingerbedienung ------------------------------------------------------ */
+
+/* Auf Touchgeräten braucht jedes Ziel mindestens 44px Kantenlänge. */
+@media (pointer: coarse) {
+  .switch__btn,
+  .btn {
+    min-height: 44px;
+    padding-inline: 1.2rem;
+  }
+
+  .explain summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .chip {
+    padding-block: 0.55rem;
+  }
+}
+
+/* Kein grauer Aufblitzer beim Antippen — dafür eine spürbare Rückmeldung. */
+:where(button, a, summary) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.switch__btn:active,
+.btn:active {
+  transform: scale(0.95);
 }
 
 /* --- Ruhiger Modus ------------------------------------------------------- */
@@ -917,6 +1003,11 @@ a {
   #quote-text,
   .quote__cite {
     transition: none !important;
+  }
+
+  .switch__btn:active,
+  .btn:active {
+    transform: none;
   }
 
   .quote.is-swapping #quote-text,
