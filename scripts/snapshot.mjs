@@ -170,13 +170,14 @@ export function parseYahoo(payload) {
  */
 async function loadAssets(prices) {
   const usdchf = prices.chf / prices.usd;
+  const eurchf = prices.chf / prices.eur;
   const assets = {};
 
   /** Rechnet einen Kurs anhand seiner Notierungswährung in Franken um. */
   const inFranken = (kurs, waehrung) => {
     if (waehrung === 'CHF') return kurs;
     if (waehrung === 'USD') return kurs * usdchf;
-    if (waehrung === 'EUR') return kurs * (prices.chf / prices.eur);
+    if (waehrung === 'EUR') return kurs * eurchf;
     return null;
   };
 
@@ -242,7 +243,14 @@ async function loadAssets(prices) {
     }
   }
 
-  return assets;
+  // Der verwendete Umrechnungskurs gehört mit in den Datenpunkt. Er stammt aus
+  // den beiden Bitcoin-Notierungen und wackelt deshalb stündlich mit; ohne ihn
+  // liesse sich später nicht mehr unterscheiden, ob ein Kurs sich bewegt hat
+  // oder nur die Umrechnung — ein geschlossener Markt sähe bewegt aus.
+  return {
+    assets,
+    fx: { USDCHF: Math.round(usdchf * 1e6) / 1e6, EURCHF: Math.round(eurchf * 1e6) / 1e6 },
+  };
 }
 
 /* --- Nachfüllen ----------------------------------------------------------- */
@@ -432,14 +440,14 @@ async function main() {
 
   if (!stundeSteht) {
     const [sats, prices] = await Promise.all([loadBalance(), loadPrices()]);
-    const assets = await loadAssets(prices);
+    const { assets, fx } = await loadAssets(prices);
 
     console.log(`  Bestand: ${(sats / 1e8).toFixed(8)} BTC`);
     console.log(`  Kurse:   ${prices.chf.toLocaleString('de-CH')} CHF / ${prices.eur} EUR / ${prices.usd} USD`);
     const namen = Object.keys(assets);
     console.log(`  Vergleich: ${namen.length ? namen.join(', ') : 'keine Quelle erreichbar'}`);
 
-    entries = upsert(entries, { t: hour, sats, ...prices, ...(namen.length ? { assets } : {}) });
+    entries = upsert(entries, { t: hour, sats, ...prices, ...(namen.length ? { assets, fx } : {}) });
   } else {
     console.log(`  Stunde ${hour} ist bereits erfasst.`);
   }

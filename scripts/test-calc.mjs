@@ -253,6 +253,34 @@ test('Umschichtung wird auf den Mitternachtswert gerechnet', () => {
   assert.equal(gold.closed, false);
 });
 
+test('ein geschlossener Auslandsmarkt gilt trotz wackelnder Umrechnung als geschlossen', () => {
+  // Der Fall in freier Wildbahn, an einem Sonntag: Gold und der S&P bewegten
+  // sich um exakt dieselben −0.053 %. Das war kein Markt, sondern der aus den
+  // Bitcoin-Notierungen abgeleitete Umrechnungskurs.
+  const usd = { gold: { name: 'Gold', quote: 'USD' } };
+  const base = {
+    ...entry('2026-08-09T07:00:00Z', 100_000_000, 50_000),
+    assets: { gold: 3554.26 },
+    fx: { USDCHF: 0.808 },
+  };
+  const jetzt = {
+    ...entry('2026-08-09T08:00:00Z', 100_000_000, 50_000),
+    // Derselbe Dollarkurs, nur eine andere Umrechnung.
+    assets: { gold: Math.round(((3554.26 / 0.808) * 0.80757) * 100) / 100 },
+    fx: { USDCHF: 0.80757 },
+  };
+  const gold = assetComparison(base, jetzt, { assets: usd }).find((r) => r.key === 'gold');
+  assert.equal(gold.closed, true);
+});
+
+test('ohne abgelegten Umrechnungskurs bleibt es beim Frankenwert', () => {
+  const usd = { gold: { name: 'Gold', quote: 'USD' } };
+  const base = { ...entry('2026-08-09T07:00:00Z', 100_000_000, 50_000), assets: { gold: 3554.26 } };
+  const jetzt = { ...entry('2026-08-09T08:00:00Z', 100_000_000, 50_000), assets: { gold: 3554.26 } };
+  const gold = assetComparison(base, jetzt, { assets: usd }).find((r) => r.key === 'gold');
+  assert.equal(gold.closed, true);
+});
+
 test('ein über Stunden unveränderter Index gilt als geschlossen', () => {
   const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { smi: 12_000 });
   const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 49_000, { smi: 12_000 });
