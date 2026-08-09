@@ -197,6 +197,25 @@ export function series(entries, baseEntry, cur) {
  * `valueMid` ist der Frankenwert des Mitternachts-Bestands, damit die Anzeige
  * nicht nur Prozente zeigt, sondern den Betrag, um den es tatsächlich geht.
  */
+/**
+ * Der Kurs in seiner Notierungswährung. Abgelegt wird er in Franken; um zu
+ * erkennen, ob ein Markt gehandelt hat, muss die Umrechnung wieder heraus —
+ * sie stammt aus den Bitcoin-Notierungen und wackelt stündlich mit, wodurch
+ * ein geschlossener Markt sonst bewegt aussieht.
+ *
+ * Fehlt der Umrechnungskurs (ältere Datenpunkte), bleibt es beim Frankenwert.
+ */
+export function nativePrice(entry, key, meta) {
+  const franken = Number(entry?.assets?.[key]);
+  if (!(franken > 0)) return null;
+
+  const waehrung = meta?.quote;
+  if (!waehrung || waehrung === 'CHF') return franken;
+
+  const kurs = Number(entry?.fx?.[`${waehrung}CHF`]);
+  return kurs > 0 ? franken / kurs : franken;
+}
+
 export function assetComparison(baseEntry, nowEntry, { assets = {}, savingsRate = 0, currency = 'chf' } = {}) {
   const valueMid = btcOf(baseEntry) * priceOf(baseEntry, currency);
   const hours = (toTime(nowEntry.t) - toTime(baseEntry.t)) / 3_600_000;
@@ -207,15 +226,27 @@ export function assetComparison(baseEntry, nowEntry, { assets = {}, savingsRate 
     const pNow = Number(nowEntry?.assets?.[key]);
     if (!(pMid > 0 && pNow > 0)) continue;
 
+    // Die Rendite rechnet in Franken — wer von hier aus umschichtet, trägt die
+    // Währungsbewegung mit, das gehört in die Zahl.
     const faktor = pNow / pMid;
+
+    // Ob gehandelt wurde, entscheidet dagegen der Kurs in seiner eigenen
+    // Währung: Ein Index, der über Stunden auf die Stelle genau gleich notiert,
+    // handelt nicht — das ist keine Nullbewegung, sondern Feierabend.
+    const nMid = nativePrice(baseEntry, key, meta);
+    const nNow = nativePrice(nowEntry, key, meta);
+
     rows.push({
       key,
       name: meta.name,
       pct: faktor - 1,
       delta: valueMid * (faktor - 1),
-      // Ein Index, der über Stunden auf die Stelle genau gleich notiert,
-      // handelt nicht — das ist keine Nullbewegung, sondern Feierabend.
-      closed: pNow === pMid,
+      // Der Frankenwert liegt auf zwei Nachkommastellen; das Herausrechnen der
+      // Umrechnung trifft den Ursprungskurs deshalb nicht auf die letzte
+      // Stelle. Ein Tausendstelprozent Spielraum deckt das ab und liegt weit
+      // unter jeder Bewegung, die ein Markt in einer Stunde zustande bringt.
+      closed:
+        nMid !== null && nNow !== null && Math.abs(nNow - nMid) <= Math.max(nMid, nNow) * 1e-5,
     });
   }
 
