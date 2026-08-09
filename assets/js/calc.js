@@ -197,10 +197,12 @@ export function series(entries, baseEntry, cur) {
  * `valueMid` ist der Frankenwert des Mitternachts-Bestands, damit die Anzeige
  * nicht nur Prozente zeigt, sondern den Betrag, um den es tatsächlich geht.
  */
-export function assetComparison(baseEntry, nowEntry, { valueMid, assets, savingsRate = 0, hours = 0 } = {}) {
+export function assetComparison(baseEntry, nowEntry, { assets = {}, savingsRate = 0, currency = 'chf' } = {}) {
+  const valueMid = btcOf(baseEntry) * priceOf(baseEntry, currency);
+  const hours = (toTime(nowEntry.t) - toTime(baseEntry.t)) / 3_600_000;
   const rows = [];
 
-  for (const [key, meta] of Object.entries(assets || {})) {
+  for (const [key, meta] of Object.entries(assets)) {
     const pMid = Number(baseEntry?.assets?.[key]);
     const pNow = Number(nowEntry?.assets?.[key]);
     if (!(pMid > 0 && pNow > 0)) continue;
@@ -221,6 +223,20 @@ export function assetComparison(baseEntry, nowEntry, { valueMid, assets, savings
     const zins = (1 + savingsRate) ** (hours / 8760) - 1;
     rows.push({ key: 'spar', name: 'Sparkonto', pct: zins, delta: valueMid * zins, closed: false, always: true });
   }
+
+  // Bitcoin gehört in dieselbe Tabelle und muss aus demselben Fenster stammen.
+  // Die Hauptzahl oben rechnet ab Mitternacht; liegen für Mitternacht keine
+  // Vergleichskurse vor, beginnt diese Tafel später — dann wäre die
+  // Mitternachtszahl hier fehl am Platz und würde Äpfel mit Birnen vergleichen.
+  const btc = periodStats(baseEntry, nowEntry, currency);
+  rows.push({
+    key: 'btc',
+    name: 'Bitcoin (unangetastet)',
+    pct: btc.hodlPct,
+    delta: btc.hodlDelta,
+    closed: false,
+    self: true,
+  });
 
   return rows.sort((a, b) => b.pct - a.pct);
 }
@@ -259,7 +275,40 @@ export function computeState(data, { currency = 'chf', now = new Date(), assets 
   const todayEntries = entries.filter((e) => toTime(e.t) >= toTime(todayBase.t));
 
   const heute = periodStats(todayBase, latest, cur);
-  const stundenSeitMitternacht = (toTime(latest.t) - toTime(todayBase.t)) / 3_600_000;
+
+  /**
+   * Der Vergleich braucht Kurse auf beiden Seiten. Fehlen sie am
+   * Mitternachtspunkt — etwa weil der Sammler sie erst später mitschreibt —
+   * beginnt die Tafel später. Alle Zeilen inklusive Bitcoin nutzen dann
+   * dieses gemeinsame Fenster; zwei verschiedene Fenster nebeneinander wären
+   * kein Vergleich.
+   *
+   * Gewählt wird der früheste Punkt mit der grössten vergleichbaren Auswahl,
+   * nicht einfach der früheste mit irgendeinem Kurs: Sonst bestimmt eine
+   * einzelne früh vorhandene Anlage das Fenster und wirft alle anderen hinaus.
+   */
+  const vergleichbar = (e) =>
+    Object.keys(assets).filter((k) => Number(e?.assets?.[k]) > 0 && Number(latest.assets?.[k]) > 0).length;
+
+  // Die Basis muss echt vor dem Jetzt-Punkt liegen. Sonst vergliche die Tafel
+  // den letzten Punkt mit sich selbst: überall 0.00 %, und die Erkennung
+  // geschlossener Märkte schlüge für jede Zeile an.
+  const vergleichsBasis = todayEntries
+    .filter((e) => toTime(e.t) < toTime(latest.t))
+    .reduce((beste, e) => {
+      const n = vergleichbar(e);
+      if (!n) return beste;
+      return !beste || n > vergleichbar(beste) ? e : beste;
+    }, null);
+
+  const vergleich = vergleichsBasis
+    ? {
+        from: vergleichsBasis.t,
+        abMitternacht: vergleichsBasis.t === todayBase.t,
+        hours: (toTime(latest.t) - toTime(vergleichsBasis.t)) / 3_600_000,
+        rows: assetComparison(vergleichsBasis, latest, { assets, savingsRate, currency: 'chf' }),
+      }
+    : null;
 
   return {
     currency: cur,
@@ -271,13 +320,7 @@ export function computeState(data, { currency = 'chf', now = new Date(), assets 
     todayMidnight,
     // Der Vergleich rechnet immer in Franken — Prozente sind währungsneutral,
     // der Betrag daneben soll aber die Hauswährung sein.
-    comparison: assetComparison(todayBase, latest, {
-      valueMid: btcOf(todayBase) * priceOf(todayBase, 'chf'),
-      assets,
-      savingsRate,
-      hours: stundenSeitMitternacht,
-    }),
-    comparisonHours: stundenSeitMitternacht,
+    comparison: vergleich,
     // War um Mitternacht schon ein Messpunkt da, oder startete das Tracking mittendrin?
     todayComplete: toTime(todayBase.t) - toTime(todayMidnight) < 90 * 60 * 1000,
     today: heute,
