@@ -243,13 +243,25 @@ a {
   background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
 }
 
-.banner__text {
-  margin: 0;
+.banner__body {
   text-align: center;
-  font-size: clamp(0.95rem, 2.4vw, 1.5rem);
+}
+
+.banner__title {
+  margin: 0;
+  font-size: clamp(1.15rem, 3.2vw, 2rem);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--amber);
+  text-wrap: balance;
+}
+
+.banner__text {
+  margin: 0.25rem 0 0;
+  font-size: clamp(0.85rem, 1.8vw, 1.05rem);
   font-weight: 300;
   letter-spacing: 0.06em;
-  color: var(--ink);
+  color: var(--muted);
   text-wrap: balance;
 }
 
