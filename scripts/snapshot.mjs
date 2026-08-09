@@ -6,6 +6,7 @@
  *   node scripts/snapshot.mjs             # echte APIs
  *   node scripts/snapshot.mjs --fixture   # Offline-Test gegen scripts/fixtures/
  *   node scripts/snapshot.mjs --dry-run   # nichts schreiben, nur ausgeben
+ *   node scripts/snapshot.mjs --force     # auch schreiben, wenn die Stunde schon steht
  *
  * Grundsatz: lieber gar nichts schreiben als Müll schreiben. Schlägt eine
  * Quelle fehl, endet das Skript mit Exit-Code 1 und lässt die Datei unberührt.
@@ -26,6 +27,7 @@ const FIXTURES = join(ROOT, 'scripts', 'fixtures');
 const args = new Set(process.argv.slice(2));
 const USE_FIXTURES = args.has('--fixture');
 const DRY_RUN = args.has('--dry-run');
+const FORCE = args.has('--force');
 
 /** Aeltere Punkte werden ausgedünnt, damit die Datei nicht endlos wächst. */
 const FULL_RESOLUTION_DAYS = 30;
@@ -154,15 +156,25 @@ export function upsert(entries, entry) {
 
 async function main() {
   const now = new Date();
+  const hour = hourKey(now);
   console.log(`Monetentracker-Snapshot ${now.toISOString()}${USE_FIXTURES ? ' (Fixtures)' : ''}`);
 
+  const history = await loadHistory();
+
+  // Der Workflow läuft zweimal pro Stunde, weil GitHub geplante Läufe unter Last
+  // verschiebt oder ganz auslässt. Steht die Stunde schon in der Datei, war der
+  // erste Versuch erfolgreich — dann hier aufhören, sonst gäbe es zwei Commits.
+  if (!FORCE && history.entries.some((e) => hourKey(e.t) === hour)) {
+    console.log(`  Stunde ${hour} ist bereits erfasst — nichts zu tun.`);
+    return;
+  }
+
   const [sats, prices] = await Promise.all([loadBalance(), loadPrices()]);
-  const entry = { t: hourKey(now), sats, ...prices };
+  const entry = { t: hour, sats, ...prices };
 
   console.log(`  Bestand: ${(sats / 1e8).toFixed(8)} BTC`);
   console.log(`  Kurse:   ${prices.chf.toLocaleString('de-CH')} CHF / ${prices.eur} EUR / ${prices.usd} USD`);
 
-  const history = await loadHistory();
   const next = {
     address: ADDRESS,
     startAt: START_AT,

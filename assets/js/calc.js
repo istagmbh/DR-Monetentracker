@@ -67,6 +67,27 @@ export function zurichMidnight(dayKey) {
   return new Date(ts);
 }
 
+/**
+ * Achsenbeschriftung mit gerade so vielen Nachkommastellen, wie der Abstand
+ * zwischen zwei Gitterlinien verlangt. Bei einem Schritt von 0.25 braucht es
+ * zwei, bei einem Schritt von 200 keine — sonst steht auf einer Achse mit
+ * engem Wertebereich fünfmal dieselbe Zahl.
+ */
+export function formatAxisNumber(value, step) {
+  // So viele Stellen, wie der Schritt selbst hat — die Grössenordnung genügt
+  // nicht: 0.25 liegt bei 10^-1, braucht aber zwei Stellen.
+  const s = Math.abs(step) || 1;
+  let decimals = 0;
+  while (decimals < 6 && Math.abs(s * 10 ** decimals - Math.round(s * 10 ** decimals)) > 1e-9) {
+    decimals += 1;
+  }
+
+  return new Intl.NumberFormat('de-CH', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+}
+
 export const toTime = (v) => (v instanceof Date ? v.getTime() : new Date(v).getTime());
 export const btcOf = (entry) => (entry ? entry.sats / SATS_PER_BTC : 0);
 export const priceOf = (entry, cur) => (entry ? Number(entry[cur] ?? 0) : 0);

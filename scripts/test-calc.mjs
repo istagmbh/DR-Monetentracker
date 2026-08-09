@@ -7,7 +7,14 @@
 
 import assert from 'node:assert/strict';
 
-import { computeState, periodStats, zurichMidnight, zurichDayKey, normaliseEntries } from '../assets/js/calc.js';
+import {
+  computeState,
+  periodStats,
+  zurichMidnight,
+  zurichDayKey,
+  normaliseEntries,
+  formatAxisNumber,
+} from '../assets/js/calc.js';
 import { hourKey, upsert, downsample } from './snapshot.mjs';
 
 let passed = 0;
@@ -177,6 +184,29 @@ test('upsert ersetzt denselben Stundenpunkt statt zu doppeln', () => {
   const next = upsert(list, { t: '2026-08-09T13:00:00Z', sats: 2, chf: 200, eur: 1, usd: 1 });
   assert.equal(next.length, 1);
   assert.equal(next[0].sats, 2);
+});
+
+test('eine bereits erfasste Stunde wird erkannt', () => {
+  // Der Workflow läuft zweimal pro Stunde; der zweite Lauf muss aufhören,
+  // sobald die Stunde in der Datei steht — sonst gäbe es zwei Commits.
+  const entries = [entry('2026-08-09T02:00:00Z', 1, 1)];
+  const belegt = (iso) => entries.some((e) => hourKey(e.t) === hourKey(iso));
+  assert.equal(belegt('2026-08-09T02:31:00Z'), true);
+  assert.equal(belegt('2026-08-09T03:01:00Z'), false);
+});
+
+test('Achsenbeschriftung bekommt so viele Stellen wie der Schritt verlangt', () => {
+  // Der Fehler in freier Wildbahn: Werte um 242 CHF, Schritt 0.25 — ohne
+  // Nachkommastellen stand auf der Achse fünfmal dieselbe Zahl.
+  // Das Tausendertrennzeichen unterscheidet sich je nach ICU-Version von Node
+  // und Chromium — hier zählt die Stellenzahl, nicht die Gruppierung.
+  const ohneGruppe = (s) => s.replace(/[’']/g, '');
+
+  assert.equal(formatAxisNumber(242.25, 0.25), '242.25');
+  assert.equal(formatAxisNumber(242.5, 0.5), '242.5');
+  assert.equal(ohneGruppe(formatAxisNumber(44_400, 200)), '44400');
+  // Schritt 0.0025: die Linien unterscheiden sich erst in der vierten Stelle.
+  assert.equal(formatAxisNumber(1.005, 0.0025), '1.0050');
 });
 
 test('downsample behält frische Stunden und je einen alten Tagespunkt', () => {
