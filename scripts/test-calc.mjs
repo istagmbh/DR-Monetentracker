@@ -16,7 +16,16 @@ import {
   formatAxisNumber,
   assetComparison,
 } from '../assets/js/calc.js';
-import { hourKey, upsert, downsample, parseStooq, missingHours, satsForGap } from './snapshot.mjs';
+import {
+  hourKey,
+  upsert,
+  downsample,
+  parseStooq,
+  missingHours,
+  satsForGap,
+  parseYahoo,
+  parseHistorical,
+} from './snapshot.mjs';
 import { pickLine, daypart } from '../assets/js/lines.js';
 
 let passed = 0;
@@ -291,7 +300,42 @@ test('leere oder kaputte Antworten ergeben keine Kurse', () => {
   assert.deepEqual(parseStooq('völlig anderes Format'), {});
 });
 
+test('Yahoo-Antwort liefert Kurs samt Notierungswährung', () => {
+  const payload = { chart: { result: [{ meta: { regularMarketPrice: 3421.55, currency: 'USD' } }] } };
+  assert.deepEqual(parseYahoo(payload), { kurs: 3421.55, waehrung: 'USD' });
+});
+
+test('Yahoo ohne Kurs ergibt nichts', () => {
+  assert.equal(parseYahoo({ chart: { result: [{ meta: {} }] } }), null);
+  assert.equal(parseYahoo({}), null);
+  assert.equal(parseYahoo({ chart: { error: 'Not Found' } }), null);
+});
+
 console.log('Lückenfüllung');
+
+test('historischer Kurs wird aus USD und Wechselkursen ergänzt', () => {
+  // Genau hier lag der Fehler: Die Abfrage lieferte nur eine Währung, die
+  // Prüfung verlangte aber alle drei — es wurde nie etwas nachgefüllt.
+  const payload = {
+    prices: [{ time: 1_754_697_600, USD: 64_790 }],
+    exchangeRates: { USDCHF: 0.808, USDEUR: 0.8657 },
+  };
+  const out = parseHistorical(payload);
+  near(out.usd, 64_790);
+  near(out.chf, 52_350.32, 0.01);
+  near(out.eur, 56_088.7, 0.01);
+});
+
+test('liefert die Quelle die Währung direkt, wird sie genommen', () => {
+  const out = parseHistorical({ prices: [{ USD: 100, CHF: 81, EUR: 87 }] });
+  assert.deepEqual(out, { usd: 100, chf: 81, eur: 87 });
+});
+
+test('ohne Wechselkurse und ohne Währungen gibt es keinen Punkt', () => {
+  assert.equal(parseHistorical({ prices: [{ USD: 64_790 }] }), null);
+  assert.equal(parseHistorical({ prices: [] }), null);
+  assert.equal(parseHistorical({}), null);
+});
 
 const reiheMitLoch = [
   entry('2026-08-09T00:00:00Z', 462_029, 52_449),

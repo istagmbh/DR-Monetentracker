@@ -24,9 +24,9 @@ export const QUOTE_MS = 12_000;
  * praktisch ausgeschlossen.
  */
 export const ASSETS = {
-  gold: { name: 'Gold', stooq: 'xauusd', usd: true },
-  spx: { name: 'S&P 500', stooq: '^spx', usd: true },
-  smi: { name: 'SMI', stooq: '^smi', usd: false },
+  gold: { name: 'Gold', yahoo: 'GC=F', stooq: 'xauusd', quote: 'USD' },
+  spx: { name: 'S&P 500', yahoo: '^GSPC', stooq: '^spx', quote: 'USD' },
+  smi: { name: 'SMI', yahoo: '^SSMI', stooq: '^smi', quote: 'CHF' },
   eth: { name: 'Ethereum', coingecko: 'ethereum' },
 };
 
