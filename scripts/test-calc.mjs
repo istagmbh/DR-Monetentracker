@@ -245,7 +245,7 @@ const mitKursen = (t, sats, chf, assets) => ({ ...entry(t, sats, chf), assets })
 test('Umschichtung wird auf den Mitternachtswert gerechnet', () => {
   const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { gold: 5000, smi: 12_000 });
   const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 49_000, { gold: 5100, smi: 12_000 });
-  const rows = assetComparison(base, jetzt, { valueMid: 50_000, assets: VERGLEICH });
+  const rows = assetComparison(base, jetzt, { assets: VERGLEICH });
 
   const gold = rows.find((r) => r.key === 'gold');
   near(gold.pct, 0.02); // 5000 -> 5100
@@ -256,28 +256,123 @@ test('Umschichtung wird auf den Mitternachtswert gerechnet', () => {
 test('ein über Stunden unveränderter Index gilt als geschlossen', () => {
   const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { smi: 12_000 });
   const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 49_000, { smi: 12_000 });
-  const smi = assetComparison(base, jetzt, { valueMid: 50_000, assets: VERGLEICH }).find((r) => r.key === 'smi');
+  const smi = assetComparison(base, jetzt, { assets: VERGLEICH }).find((r) => r.key === 'smi');
   assert.equal(smi.closed, true);
 });
 
 test('Anlagen ohne Kurs fallen still heraus', () => {
   const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { gold: 5000 });
   const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 49_000, {});
-  assert.equal(assetComparison(base, jetzt, { valueMid: 50_000, assets: VERGLEICH }).length, 0);
+  const rows = assetComparison(base, jetzt, { assets: VERGLEICH });
+  assert.deepEqual(rows.filter((r) => !r.self).map((r) => r.key), []);
+});
+
+test('Bitcoin steht als eigene Zeile in derselben Tabelle', () => {
+  const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { gold: 5000 });
+  const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 55_000, { gold: 5000 });
+  const btc = assetComparison(base, jetzt, { assets: VERGLEICH }).find((r) => r.self);
+  near(btc.pct, 0.1);
+  near(btc.delta, 5000);
 });
 
 test('das Sparkonto verzinst anteilig und steht immer da', () => {
   const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, {});
-  const rows = assetComparison(base, base, { valueMid: 50_000, assets: {}, savingsRate: 0.0075, hours: 8760 });
-  near(rows[0].pct, 0.0075);
-  near(rows[0].delta, 375);
+  const jahrSpaeter = mitKursen('2027-08-09T00:00:00Z', 100_000_000, 50_000, {});
+  const spar = assetComparison(base, jahrSpaeter, { assets: {}, savingsRate: 0.0075 }).find((r) => r.key === 'spar');
+  near(spar.pct, 0.0075);
+  near(spar.delta, 375);
 });
 
 test('die Rangliste ist nach Rendite sortiert', () => {
   const base = mitKursen('2026-08-09T00:00:00Z', 100_000_000, 50_000, { gold: 100, smi: 100 });
   const jetzt = mitKursen('2026-08-09T06:00:00Z', 100_000_000, 50_000, { gold: 90, smi: 110 });
-  const rows = assetComparison(base, jetzt, { valueMid: 50_000, assets: VERGLEICH });
-  assert.deepEqual(rows.map((r) => r.key), ['smi', 'gold']);
+  const rows = assetComparison(base, jetzt, { assets: VERGLEICH });
+  // Bitcoin steht unverändert bei 50'000 und landet damit zwischen den beiden.
+  assert.deepEqual(rows.map((r) => r.key), ['smi', 'btc', 'gold']);
+});
+
+test('fehlen Kurse um Mitternacht, beginnt der Vergleich später — für alle Zeilen', () => {
+  // Der Fall in freier Wildbahn: Der Sammler schrieb Vergleichskurse erst ab
+  // 07:00 mit. Bitcoin ab Mitternacht gegen Gold ab 07:00 zu stellen, wäre
+  // ein Vergleich zweier verschiedener Zeitfenster.
+  const daten = {
+    startAt: '2026-08-09T00:00:00+02:00',
+    entries: [
+      mitKursen('2026-08-08T22:00:00Z', 100_000_000, 50_000, undefined), // Mitternacht, keine Kurse
+      mitKursen('2026-08-09T05:00:00Z', 100_000_000, 52_000, { gold: 5000 }),
+      mitKursen('2026-08-09T08:00:00Z', 100_000_000, 54_000, { gold: 5100 }),
+    ],
+  };
+  const s = computeState(daten, { now: new Date('2026-08-09T08:30:00Z'), assets: VERGLEICH });
+
+  assert.equal(s.comparison.from, '2026-08-09T05:00:00Z');
+  assert.equal(s.comparison.abMitternacht, false);
+  near(s.comparison.rows.find((r) => r.key === 'gold').pct, 0.02);
+  // Bitcoin ab 05:00, nicht ab Mitternacht: 52'000 -> 54'000.
+  near(s.comparison.rows.find((r) => r.self).pct, 2000 / 52_000);
+  // Die Hauptzahl oben rechnet weiterhin ab Mitternacht.
+  near(s.today.hodlPct, 4000 / 50_000);
+});
+
+test('liegen um Mitternacht Kurse vor, beginnt der Vergleich dort', () => {
+  const daten = {
+    startAt: '2026-08-09T00:00:00+02:00',
+    entries: [
+      mitKursen('2026-08-08T22:00:00Z', 100_000_000, 50_000, { gold: 5000 }),
+      mitKursen('2026-08-09T08:00:00Z', 100_000_000, 54_000, { gold: 5100 }),
+    ],
+  };
+  const s = computeState(daten, { now: new Date('2026-08-09T08:30:00Z'), assets: VERGLEICH });
+  assert.equal(s.comparison.abMitternacht, true);
+  assert.equal(s.comparison.from, '2026-08-08T22:00:00Z');
+});
+
+test('eine einzelne früh vorhandene Anlage bestimmt das Fenster nicht', () => {
+  // Genau der Fall in den echten Daten: um 06:00 lag nur Ethereum vor, ab
+  // 07:00 alle vier. Ab 06:00 zu rechnen hätte drei Anlagen hinausgeworfen.
+  const drei = { gold: { name: 'Gold' }, smi: { name: 'SMI' }, eth: { name: 'Ethereum' } };
+  const daten = {
+    startAt: '2026-08-09T00:00:00+02:00',
+    entries: [
+      mitKursen('2026-08-08T22:00:00Z', 100_000_000, 50_000, undefined),
+      mitKursen('2026-08-09T04:00:00Z', 100_000_000, 51_000, { eth: 1500 }),
+      mitKursen('2026-08-09T05:00:00Z', 100_000_000, 52_000, { eth: 1510, gold: 5000, smi: 12_000 }),
+      mitKursen('2026-08-09T08:00:00Z', 100_000_000, 54_000, { eth: 1520, gold: 5100, smi: 12_100 }),
+    ],
+  };
+  const s = computeState(daten, { now: new Date('2026-08-09T08:30:00Z'), assets: drei });
+
+  assert.equal(s.comparison.from, '2026-08-09T05:00:00Z');
+  assert.deepEqual(
+    s.comparison.rows.map((r) => r.key).sort(),
+    ['btc', 'eth', 'gold', 'smi'],
+  );
+});
+
+test('ein einzelner Punkt mit Kursen ergibt noch keinen Vergleich', () => {
+  // Sonst verglichen wir den letzten Punkt mit sich selbst: überall 0.00 %,
+  // und jede Zeile gälte als geschlossener Markt.
+  const daten = {
+    startAt: '2026-08-09T00:00:00+02:00',
+    entries: [
+      mitKursen('2026-08-08T22:00:00Z', 100_000_000, 50_000, undefined),
+      mitKursen('2026-08-09T08:00:00Z', 100_000_000, 54_000, { gold: 5100 }),
+    ],
+  };
+  const s = computeState(daten, { now: new Date('2026-08-09T08:30:00Z'), assets: VERGLEICH });
+  assert.equal(s.comparison, null);
+});
+
+test('ohne Vergleichskurse gibt es gar keine Tafel', () => {
+  const daten = {
+    startAt: '2026-08-09T00:00:00+02:00',
+    entries: [
+      mitKursen('2026-08-08T22:00:00Z', 100_000_000, 50_000, undefined),
+      mitKursen('2026-08-09T08:00:00Z', 100_000_000, 54_000, undefined),
+    ],
+  };
+  const s = computeState(daten, { now: new Date('2026-08-09T08:30:00Z'), assets: VERGLEICH });
+  assert.equal(s.comparison, null);
 });
 
 console.log('Vergleichskurse einlesen');

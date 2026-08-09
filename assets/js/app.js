@@ -155,22 +155,15 @@ function renderCards(s) {
  */
 function renderComparison(s) {
   const panel = $('#compare');
-  const rows = s.comparison ?? [];
 
-  // Ohne Vergleichskurse in den Daten hat die Tafel nichts zu zeigen.
-  const echte = rows.filter((r) => !r.always);
-  panel.hidden = echte.length === 0;
+  // Ohne Vergleichskurse auf beiden Seiten hat die Tafel nichts zu zeigen.
+  panel.hidden = !s.comparison || !s.comparison.rows.some((r) => !r.always && !r.self);
   if (panel.hidden) return;
-
-  const alle = [
-    ...rows,
-    { key: 'btc', name: 'Bitcoin (unangetastet)', pct: s.today.hodlPct, delta: s.today.hodlDelta, self: true },
-  ].sort((a, b) => b.pct - a.pct);
 
   const liste = $('#compare-rows');
   liste.textContent = '';
 
-  alle.forEach((r, i) => {
+  s.comparison.rows.forEach((r, i) => {
     const li = document.createElement('li');
     li.className = `rank${r.self ? ' rank--self' : ''}`;
 
@@ -202,10 +195,12 @@ function renderComparison(s) {
     liste.append(li);
   });
 
-  $('.compare__hint').textContent =
-    s.comparisonHours >= 1
-      ? `seit Mitternacht · ${Math.round(s.comparisonHours)} h`
-      : 'seit Mitternacht';
+  // Beginnt die Tafel nicht um Mitternacht, muss das dranstehen — sonst liest
+  // man sie versehentlich gegen die Hauptzahl oben, die ab 00:00 rechnet.
+  const dauer = s.comparison.hours >= 1 ? ` · ${Math.round(s.comparison.hours)} h` : '';
+  $('.compare__hint').textContent = s.comparison.abMitternacht
+    ? `seit Mitternacht${dauer}`
+    : `seit ${clockOf(s.comparison.from)}${dauer} — davor fehlen Vergleichskurse`;
 }
 
 function renderChartPanel(s) {
