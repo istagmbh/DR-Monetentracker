@@ -17,6 +17,7 @@ import {
   assetComparison,
 } from '../assets/js/calc.js';
 import { hourKey, upsert, downsample, parseStooq, missingHours, satsForGap } from './snapshot.mjs';
+import { pickLine, daypart } from '../assets/js/lines.js';
 
 let passed = 0;
 const test = (name, fn) => {
@@ -329,6 +330,68 @@ test('bewegte sich der Bestand, bleibt die Lücke offen', () => {
     entry('2026-08-09T02:00:00Z', 300_000, 52_349),
   ];
   assert.equal(satsForGap(bewegt, '2026-08-09T01:00:00Z'), null);
+});
+
+console.log('Sprüche');
+
+test('kein Spruch spricht zur falschen Tageszeit', () => {
+  // Der Fehler in freier Wildbahn: "Der Abend ist jung" stand um 06:00 auf der Seite.
+  // Wortgrenzen sind Pflicht: "Mitternacht" ist der Bezugspunkt der Rechnung
+  // und keine Tageszeitangabe — der Spruch darf zu jeder Stunde stehen.
+  const tabu = {
+    nacht: /\b(morgen|mittag|abend)\b/i,
+    morgen: /\b(abend|nacht|mittag)\b/i,
+    tag: /\b(abend|nacht)\b/i,
+    abend: /\b(morgen|nacht)\b/i,
+  };
+
+  for (let h = 0; h < 24; h += 1) {
+    for (const pct of [0.05, 0.01, 0, -0.01, -0.05]) {
+      const satz = pickLine(pct, h);
+      const zeit = daypart(h);
+      assert.ok(
+        !tabu[zeit].test(satz),
+        `Stunde ${h} (${zeit}) liefert einen unpassenden Spruch: "${satz}"`,
+      );
+    }
+  }
+});
+
+test('die Tageszeiten teilen den Tag lückenlos auf', () => {
+  assert.equal(daypart(0), 'nacht');
+  assert.equal(daypart(4), 'nacht');
+  assert.equal(daypart(5), 'morgen');
+  assert.equal(daypart(10), 'morgen');
+  assert.equal(daypart(11), 'tag');
+  assert.equal(daypart(17), 'tag');
+  assert.equal(daypart(18), 'abend');
+  assert.equal(daypart(23), 'abend');
+});
+
+test('zu jeder Stunde und jeder Wucht gibt es einen Spruch', () => {
+  for (let h = 0; h < 24; h += 1) {
+    for (const pct of [0.5, 0.05, 0.01, 0, -0.01, -0.05, -0.5]) {
+      const satz = pickLine(pct, h);
+      assert.ok(typeof satz === 'string' && satz.length > 10, `Stunde ${h}, ${pct}: "${satz}"`);
+    }
+  }
+});
+
+test('der Spruch bleibt innerhalb derselben Stunde stabil', () => {
+  assert.equal(pickLine(-0.01, 6), pickLine(-0.01, 6));
+});
+
+test('über den Tag kommt mehr als ein Spruch zum Zug', () => {
+  // Mit schlichtem "hour % länge" lieferten 03, 06, 09 und 14 Uhr denselben Satz.
+  const proWucht = [0.05, -0.01].map((pct) => {
+    const alle = Array.from({ length: 24 }, (_, h) => pickLine(pct, h));
+    return new Set(alle).size;
+  });
+  proWucht.forEach((anzahl) => assert.ok(anzahl >= 3, `nur ${anzahl} verschiedene Sprüche über 24 Stunden`));
+});
+
+test('die Bitcoin-Ansicht hat ihren eigenen Spruch', () => {
+  assert.match(pickLine(-0.01, 6, { btcMode: true }), /rechnet man in Franken/);
 });
 
 console.log(`\n${passed} Prüfungen bestanden${process.exitCode ? ' — mit Fehlern' : ''}`);
