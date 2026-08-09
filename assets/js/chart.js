@@ -58,7 +58,9 @@ export function renderChart(container, { points, formatValue, formatTime, showAc
   for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
     gridLines.push(
       `<line x1="${PAD.left}" x2="${W - PAD.right}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="grid" />` +
-        `<text x="${PAD.left - 12}" y="${(y(v) + fontSize * 0.35).toFixed(1)}" class="ylab">${formatValue(v, true)}</text>`,
+        // Der Schritt geht mit: sonst runden eng beieinanderliegende Linien
+        // auf dieselbe Zahl und die Achse liest sich "242 · 242 · 242".
+        `<text x="${PAD.left - 12}" y="${(y(v) + fontSize * 0.35).toFixed(1)}" class="ylab">${formatValue(v, true, step)}</text>`,
     );
   }
 

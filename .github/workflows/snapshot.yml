@@ -3,9 +3,13 @@ name: Stündlicher Snapshot
 # Achtung: GitHub führt geplante Workflows ausschliesslich auf dem Default-Branch
 # aus. Der Cron greift also erst, wenn dieser Stand auf main liegt. Vorher lässt
 # sich der Lauf jederzeit von Hand über "Run workflow" auslösen.
+# Zweimal pro Stunde, weil GitHub geplante Läufe unter Last verschiebt oder
+# auslässt — beobachtet: die Stunde 01:00 fiel aus, 02:00 kam 57 Minuten zu spät.
+# Das Skript schreibt nur, wenn die Stunde noch fehlt, es bleibt also bei
+# einem Commit pro Stunde.
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0,30 * * * *'
   workflow_dispatch:
 
 permissions:

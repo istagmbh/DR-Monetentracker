@@ -4,7 +4,7 @@
  * Die Seite lebt allein von data/history.json, das der stündliche Workflow pflegt.
  */
 
-import { computeState, TZ } from './calc.js';
+import { computeState, formatAxisNumber, TZ } from './calc.js';
 import { ADDRESS, START_AT, DATA_URL, DEMO_URL, REFRESH_MS, QUOTE_MS } from './config.js';
 import { setOdometer } from './odometer.js';
 import { renderChart } from './chart.js';
@@ -182,8 +182,8 @@ function renderChartPanel(s) {
   renderChart($('#chart'), {
     points,
     showActual,
-    formatValue: (v, axis = false) =>
-      axis ? fmt0.format(v) : money(v, { compact: true, currency: dataCurrency(state.display) }),
+    formatValue: (v, axis = false, step = 1) =>
+      axis ? formatAxisNumber(v, step) : money(v, { compact: true, currency: dataCurrency(state.display) }),
     formatTime: (t, detailed = false) => (long || detailed ? stampOf(t) : clockOf(t)),
   });
 }
