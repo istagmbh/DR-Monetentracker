@@ -34,6 +34,14 @@ const entries = [];
 let chf = 91_235;
 let sats = START_SATS;
 
+// Vergleichsanlagen: Gold und Ethereum bewegen sich rund um die Uhr, die
+// Aktienindizes stehen ausserhalb der Handelszeiten still — genau das soll die
+// Vorschau zeigen, damit "Markt geschlossen" auch sichtbar wird.
+let gold = 3_170;
+let eth = 2_840;
+const SMI = 12_040.5;
+const SPX = 5_229.63;
+
 for (let i = 0; i < HOURS; i += 1) {
   const t = new Date(Date.parse(START_AT) + i * 3600 * 1000);
 
@@ -47,12 +55,27 @@ for (let i = 0; i < HOURS; i += 1) {
   if (i === 34) sats += 15_000_000;
   if (i === 78) sats -= 8_000_000;
 
+  gold *= 1 + 0.0004 * (rand() * 2 - 1) * 4;
+  eth *= 1 + 0.0012 * (rand() * 2 - 1) * 5;
+
+  // Der SMI notiert werktags von 09:00 bis 17:30 Zürcher Zeit; ausserhalb steht
+  // der Schlusskurs. Für die Vorschau genügt diese grobe Nachbildung.
+  const stundeZH = (t.getUTCHours() + 2) % 24;
+  const boerseOffen = stundeZH >= 9 && stundeZH < 18;
+  const zeitfaktor = boerseOffen ? 1 + 0.0006 * (i % 7) : 1;
+
   entries.push({
     t: new Date(Math.floor(t.getTime() / 3600000) * 3600000).toISOString().replace('.000Z', 'Z'),
     sats,
     chf: Math.round(chf * 100) / 100,
     eur: Math.round(chf * 0.922 * 100) / 100,
     usd: Math.round(chf * 1.079 * 100) / 100,
+    assets: {
+      gold: Math.round(gold * 100) / 100,
+      spx: Math.round(SPX * zeitfaktor * 100) / 100,
+      smi: Math.round(SMI * zeitfaktor * 100) / 100,
+      eth: Math.round(eth * 100) / 100,
+    },
   });
 }
 

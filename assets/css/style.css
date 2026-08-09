@@ -531,6 +531,85 @@ main {
   color: var(--down);
 }
 
+/* --- Rangliste der Anlagen ------------------------------------------------ */
+
+.compare__hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted-2);
+}
+
+.ranks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.rank {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.rank:first-child {
+  border-top: 0;
+}
+
+/* Die eigene Position hebt sich ab — sie ist der Bezugspunkt der Tafel. */
+.rank--self {
+  background: linear-gradient(90deg, var(--amber-soft), transparent 70%);
+  margin-inline: -0.6rem;
+  padding-inline: 0.6rem;
+  border-radius: 3px;
+}
+
+.rank__pos {
+  font-family: var(--font-num);
+  font-size: 0.75rem;
+  color: var(--muted-2);
+}
+
+.rank__name {
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.rank--self .rank__name {
+  font-weight: 600;
+  color: var(--amber);
+}
+
+.rank__pct,
+.rank__delta {
+  font-family: var(--font-num);
+  font-size: 0.88rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rank__delta {
+  min-width: 7.5ch;
+  color: var(--muted);
+}
+
+.rank__closed {
+  font-size: 0.72rem;
+  color: var(--muted-2);
+  font-style: italic;
+}
+
+.compare__foot {
+  margin: 0.9rem 0 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.74rem;
+  color: var(--muted-2);
+}
+
 /* --- Verlauf -------------------------------------------------------------- */
 
 .chart {

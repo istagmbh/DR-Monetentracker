@@ -189,10 +189,47 @@ export function series(entries, baseEntry, cur) {
 }
 
 /**
+ * Die Anschlussfrage: Was, wenn er um 00:00 nicht nur nichts getan, sondern
+ * umgeschichtet hätte? Gerechnet wird für jede Anlage dieselbe Bewegung wie
+ * für Bitcoin — der Mitternachtswert, mit der Kursentwicklung der Anlage
+ * fortgeschrieben.
+ *
+ * `valueMid` ist der Frankenwert des Mitternachts-Bestands, damit die Anzeige
+ * nicht nur Prozente zeigt, sondern den Betrag, um den es tatsächlich geht.
+ */
+export function assetComparison(baseEntry, nowEntry, { valueMid, assets, savingsRate = 0, hours = 0 } = {}) {
+  const rows = [];
+
+  for (const [key, meta] of Object.entries(assets || {})) {
+    const pMid = Number(baseEntry?.assets?.[key]);
+    const pNow = Number(nowEntry?.assets?.[key]);
+    if (!(pMid > 0 && pNow > 0)) continue;
+
+    const faktor = pNow / pMid;
+    rows.push({
+      key,
+      name: meta.name,
+      pct: faktor - 1,
+      delta: valueMid * (faktor - 1),
+      // Ein Index, der über Stunden auf die Stelle genau gleich notiert,
+      // handelt nicht — das ist keine Nullbewegung, sondern Feierabend.
+      closed: pNow === pMid,
+    });
+  }
+
+  if (savingsRate > 0 && hours > 0) {
+    const zins = (1 + savingsRate) ** (hours / 8760) - 1;
+    rows.push({ key: 'spar', name: 'Sparkonto', pct: zins, delta: valueMid * zins, closed: false, always: true });
+  }
+
+  return rows.sort((a, b) => b.pct - a.pct);
+}
+
+/**
  * Alles, was die Oberfläche braucht, in einem Rutsch.
  * `now` ist injizierbar, damit Tests nicht von der Systemuhr abhängen.
  */
-export function computeState(data, { currency = 'chf', now = new Date() } = {}) {
+export function computeState(data, { currency = 'chf', now = new Date(), assets = {}, savingsRate = 0 } = {}) {
   const cur = CURRENCIES.includes(currency) ? currency : 'chf';
   const startAt = data?.startAt ? new Date(data.startAt) : null;
 
@@ -221,6 +258,9 @@ export function computeState(data, { currency = 'chf', now = new Date() } = {}) 
 
   const todayEntries = entries.filter((e) => toTime(e.t) >= toTime(todayBase.t));
 
+  const heute = periodStats(todayBase, latest, cur);
+  const stundenSeitMitternacht = (toTime(latest.t) - toTime(todayBase.t)) / 3_600_000;
+
   return {
     currency: cur,
     entries,
@@ -229,9 +269,18 @@ export function computeState(data, { currency = 'chf', now = new Date() } = {}) 
     hasData: true,
     pending: false,
     todayMidnight,
+    // Der Vergleich rechnet immer in Franken — Prozente sind währungsneutral,
+    // der Betrag daneben soll aber die Hauswährung sein.
+    comparison: assetComparison(todayBase, latest, {
+      valueMid: btcOf(todayBase) * priceOf(todayBase, 'chf'),
+      assets,
+      savingsRate,
+      hours: stundenSeitMitternacht,
+    }),
+    comparisonHours: stundenSeitMitternacht,
     // War um Mitternacht schon ein Messpunkt da, oder startete das Tracking mittendrin?
     todayComplete: toTime(todayBase.t) - toTime(todayMidnight) < 90 * 60 * 1000,
-    today: periodStats(todayBase, latest, cur),
+    today: heute,
     total: periodStats(startBase, latest, cur),
     hours: extremeHours(todayEntries.length > 1 ? todayEntries : entries, cur),
     chart: series(entries, startBase, cur),

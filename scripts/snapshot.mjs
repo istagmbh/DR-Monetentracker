@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Holt einmal pro Stunde den Wallet-Bestand und die Bitcoin-Kurse und hängt
- * einen Datenpunkt an data/history.json an. Läuft im GitHub-Actions-Cron.
+ * Holt einmal pro Stunde den Wallet-Bestand, die Bitcoin-Kurse und die Kurse
+ * der Vergleichsanlagen und hängt einen Datenpunkt an data/history.json an.
+ * Läuft im GitHub-Actions-Cron.
  *
  *   node scripts/snapshot.mjs             # echte APIs
  *   node scripts/snapshot.mjs --fixture   # Offline-Test gegen scripts/fixtures/
@@ -9,7 +10,9 @@
  *   node scripts/snapshot.mjs --force     # auch schreiben, wenn die Stunde schon steht
  *
  * Grundsatz: lieber gar nichts schreiben als Müll schreiben. Schlägt eine
- * Quelle fehl, endet das Skript mit Exit-Code 1 und lässt die Datei unberührt.
+ * Pflichtquelle fehl, endet das Skript mit Exit-Code 1 und lässt die Datei
+ * unberührt. Vergleichskurse sind Kür — fällt einer aus, fehlt eben diese
+ * Anlage für diese Stunde, und die Anzeige blendet sie aus.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -17,7 +20,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ADDRESS, START_AT } from '../assets/js/config.js';
+import { ADDRESS, START_AT, ASSETS, BACKFILL_HOURS } from '../assets/js/config.js';
 import { normaliseEntries, toTime, zurichDayKey, CURRENCIES } from '../assets/js/calc.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,21 +32,22 @@ const USE_FIXTURES = args.has('--fixture');
 const DRY_RUN = args.has('--dry-run');
 const FORCE = args.has('--force');
 
-/** Aeltere Punkte werden ausgedünnt, damit die Datei nicht endlos wächst. */
+/** Ältere Punkte werden ausgedünnt, damit die Datei nicht endlos wächst. */
 const FULL_RESOLUTION_DAYS = 30;
 
+const HOUR = 3600 * 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchJson(url, { attempts = 3, timeoutMs = 20_000 } = {}) {
+async function fetchText(url, { attempts = 3, timeoutMs = 20_000 } = {}) {
   let lastError;
   for (let i = 1; i <= attempts; i += 1) {
     try {
       const res = await fetch(url, {
         signal: AbortSignal.timeout(timeoutMs),
-        headers: { accept: 'application/json', 'user-agent': 'dr-monetentracker/1.0' },
+        headers: { accept: 'text/csv,application/json', 'user-agent': 'dr-monetentracker/1.0' },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return await res.json();
+      return await res.text();
     } catch (err) {
       lastError = err;
       console.warn(`  Versuch ${i}/${attempts} fehlgeschlagen für ${url}: ${err.message}`);
@@ -53,7 +57,11 @@ async function fetchJson(url, { attempts = 3, timeoutMs = 20_000 } = {}) {
   throw lastError;
 }
 
+const fetchJson = async (url, opts) => JSON.parse(await fetchText(url, opts));
+
 const readFixture = async (name) => JSON.parse(await readFile(join(FIXTURES, name), 'utf8'));
+
+/* --- Pflichtquellen: Bestand und Bitcoin-Kurs ----------------------------- */
 
 /** Bestätigte Beträge plus noch unbestätigte Mempool-Bewegungen. */
 function satsFromAddress(payload) {
@@ -107,6 +115,183 @@ async function loadPrices() {
   return prices;
 }
 
+/* --- Kür: Vergleichsanlagen ----------------------------------------------- */
+
+/**
+ * Stooq liefert mehrere Symbole als CSV in einem Aufruf:
+ *   Symbol,Date,Time,Close
+ *   XAUUSD,2026-08-09,03:58:00,3421.55
+ * Nicht gelieferte Werte stehen als "N/D" drin.
+ */
+export function parseStooq(csv) {
+  const out = {};
+  const zeilen = String(csv).trim().split(/\r?\n/);
+  if (zeilen.length < 2) return out;
+
+  const spalten = zeilen[0].toLowerCase().split(',');
+  const iSym = spalten.indexOf('symbol');
+  const iClose = spalten.indexOf('close');
+  if (iSym < 0 || iClose < 0) return out;
+
+  for (const zeile of zeilen.slice(1)) {
+    const felder = zeile.split(',');
+    const symbol = (felder[iSym] || '').trim().toLowerCase();
+    const kurs = Number(felder[iClose]);
+    if (symbol && Number.isFinite(kurs) && kurs > 0) out[symbol] = kurs;
+  }
+  return out;
+}
+
+/**
+ * Alle Vergleichskurse in Franken. Der Dollarkurs kommt aus den beiden
+ * Bitcoin-Notierungen — CHF je BTC geteilt durch USD je BTC ist der
+ * USD/CHF-Kurs, ein zusätzlicher Aufruf erübrigt sich damit.
+ */
+async function loadAssets(prices) {
+  const usdchf = prices.chf / prices.usd;
+  const assets = {};
+
+  const stooqSymbole = Object.values(ASSETS)
+    .filter((a) => a.stooq)
+    .map((a) => a.stooq);
+
+  if (stooqSymbole.length) {
+    try {
+      const csv = USE_FIXTURES
+        ? await readFile(join(FIXTURES, 'stooq.csv'), 'utf8')
+        : await fetchText(`https://stooq.com/q/l/?s=${stooqSymbole.map(encodeURIComponent).join('+')}&f=sd2t2c&h&e=csv`);
+      const kurse = parseStooq(csv);
+      for (const [key, meta] of Object.entries(ASSETS)) {
+        const roh = meta.stooq && kurse[meta.stooq.toLowerCase()];
+        if (roh) assets[key] = Math.round(roh * (meta.usd ? usdchf : 1) * 100) / 100;
+      }
+    } catch (err) {
+      console.warn(`  Vergleichskurse von Stooq nicht erreichbar: ${err.message}`);
+    }
+  }
+
+  const geckoIds = Object.entries(ASSETS).filter(([, a]) => a.coingecko);
+  if (geckoIds.length && !USE_FIXTURES) {
+    try {
+      const ids = geckoIds.map(([, a]) => a.coingecko).join(',');
+      const payload = await fetchJson(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=chf`,
+        { attempts: 2 },
+      );
+      for (const [key, meta] of geckoIds) {
+        const kurs = Number(payload?.[meta.coingecko]?.chf);
+        if (Number.isFinite(kurs) && kurs > 0) assets[key] = Math.round(kurs * 100) / 100;
+      }
+    } catch (err) {
+      console.warn(`  Vergleichskurse von CoinGecko nicht erreichbar: ${err.message}`);
+    }
+  }
+
+  return assets;
+}
+
+/* --- Nachfüllen ----------------------------------------------------------- */
+
+/** Auf die volle Stunde abgerundeter UTC-Zeitstempel, unser Schlüssel je Datenpunkt. */
+export function hourKey(date) {
+  const d = new Date(date);
+  d.setUTCMinutes(0, 0, 0);
+  return d.toISOString().replace('.000Z', 'Z');
+}
+
+/**
+ * Welche vollen Stunden fehlen zwischen dem letzten Eintrag und jetzt?
+ * GitHub verwirft geplante Läufe unter Last — ohne Nachfüllen bleiben die
+ * Lücken für immer in der Reihe stehen.
+ */
+export function missingHours(entries, now, maxHours = BACKFILL_HOURS) {
+  if (!entries.length) return [];
+
+  const vorhanden = new Set(entries.map((e) => hourKey(e.t)));
+  const bis = new Date(hourKey(now)).getTime();
+  const frueheste = bis - maxHours * HOUR;
+  const ab = Math.max(new Date(hourKey(entries[0].t)).getTime(), frueheste);
+
+  const fehlend = [];
+  for (let t = ab; t < bis; t += HOUR) {
+    const key = hourKey(new Date(t));
+    if (!vorhanden.has(key)) fehlend.push(key);
+  }
+  return fehlend;
+}
+
+/**
+ * Der Bestand einer fehlenden Stunde lässt sich nur dann verlässlich angeben,
+ * wenn er davor und danach derselbe war. Hat sich in der Lücke etwas bewegt,
+ * bleibt sie offen — eine erfundene Zahl wäre schlimmer als ein Loch.
+ */
+export function satsForGap(entries, hour) {
+  const t = new Date(hour).getTime();
+  const davor = [...entries].reverse().find((e) => toTime(e.t) < t);
+  const danach = entries.find((e) => toTime(e.t) > t);
+  if (!davor || !danach) return null;
+  return davor.sats === danach.sats ? davor.sats : null;
+}
+
+/** Historischer Bitcoin-Kurs zu einem Zeitpunkt, in allen drei Währungen. */
+async function historicalPrices(hour) {
+  const stamp = Math.floor(new Date(hour).getTime() / 1000);
+  const payload = await fetchJson(
+    `https://mempool.space/api/v1/historical-price?currency=CHF&timestamp=${stamp}`,
+    { attempts: 2 },
+  );
+
+  // Die Antwort trägt die Notierungen in `prices`, je Eintrag ein Zeitpunkt.
+  const eintrag = Array.isArray(payload?.prices) ? payload.prices[0] : payload;
+  const out = {
+    chf: Number(eintrag?.CHF ?? eintrag?.chf),
+    eur: Number(eintrag?.EUR ?? eintrag?.eur),
+    usd: Number(eintrag?.USD ?? eintrag?.usd),
+  };
+  return CURRENCIES.every((c) => Number.isFinite(out[c]) && out[c] > 0) ? out : null;
+}
+
+async function backfill(entries, now) {
+  const luecken = missingHours(entries, now);
+  if (!luecken.length) return { entries, gefuellt: 0, uebersprungen: 0 };
+  if (USE_FIXTURES) {
+    console.log(`  ${luecken.length} Lücke(n) erkannt — im Fixture-Modus wird nicht nachgefüllt.`);
+    return { entries, gefuellt: 0, uebersprungen: luecken.length };
+  }
+
+  console.log(`  ${luecken.length} fehlende Stunde(n) gefunden, fülle nach…`);
+  let ergaenzt = [...entries];
+  let gefuellt = 0;
+  let uebersprungen = 0;
+
+  for (const hour of luecken) {
+    const sats = satsForGap(ergaenzt, hour);
+    if (sats === null) {
+      console.warn(`  ${hour}: Bestand hat sich in der Lücke bewegt — nicht nachfüllbar.`);
+      uebersprungen += 1;
+      continue;
+    }
+    try {
+      const prices = await historicalPrices(hour);
+      if (!prices) {
+        console.warn(`  ${hour}: kein brauchbarer historischer Kurs.`);
+        uebersprungen += 1;
+        continue;
+      }
+      ergaenzt = normaliseEntries([...ergaenzt, { t: hour, sats, ...prices, bf: true }]);
+      gefuellt += 1;
+      await sleep(300); // die Quelle nicht überrennen
+    } catch (err) {
+      console.warn(`  ${hour}: Nachfüllen fehlgeschlagen (${err.message}).`);
+      uebersprungen += 1;
+    }
+  }
+
+  return { entries: ergaenzt, gefuellt, uebersprungen };
+}
+
+/* --- Datei ---------------------------------------------------------------- */
+
 async function loadHistory() {
   if (!existsSync(DATA_FILE)) return { address: ADDRESS, startAt: START_AT, updatedAt: null, entries: [] };
   try {
@@ -117,20 +302,13 @@ async function loadHistory() {
   }
 }
 
-/** Auf die volle Stunde abgerundeter UTC-Zeitstempel, unser Schlüssel je Datenpunkt. */
-export function hourKey(date) {
-  const d = new Date(date);
-  d.setUTCMinutes(0, 0, 0);
-  return d.toISOString().replace('.000Z', 'Z');
-}
-
 /**
  * Punkte älter als 30 Tage auf einen pro Tag reduzieren — und zwar auf den
  * ersten des Tages. Der ist der Mitternachts-Bezugspunkt, den die Auswertung
  * braucht; er darf nie wegfallen.
  */
 export function downsample(entries, now = new Date()) {
-  const cutoff = toTime(now) - FULL_RESOLUTION_DAYS * 24 * 3600 * 1000;
+  const cutoff = toTime(now) - FULL_RESOLUTION_DAYS * 24 * HOUR;
   const keptDays = new Set();
   const out = [];
 
@@ -162,29 +340,47 @@ async function main() {
   const history = await loadHistory();
 
   // Der Workflow läuft zweimal pro Stunde, weil GitHub geplante Läufe unter Last
-  // verschiebt oder ganz auslässt. Steht die Stunde schon in der Datei, war der
-  // erste Versuch erfolgreich — dann hier aufhören, sonst gäbe es zwei Commits.
-  if (!FORCE && history.entries.some((e) => hourKey(e.t) === hour)) {
-    console.log(`  Stunde ${hour} ist bereits erfasst — nichts zu tun.`);
-    return;
+  // verschiebt oder ganz auslässt. Steht die Stunde schon in der Datei, bleibt
+  // nur noch zu prüfen, ob ältere Lücken zu füllen sind.
+  const stundeSteht = !FORCE && history.entries.some((e) => hourKey(e.t) === hour);
+
+  let entries = normaliseEntries(history.entries);
+
+  if (!stundeSteht) {
+    const [sats, prices] = await Promise.all([loadBalance(), loadPrices()]);
+    const assets = await loadAssets(prices);
+
+    console.log(`  Bestand: ${(sats / 1e8).toFixed(8)} BTC`);
+    console.log(`  Kurse:   ${prices.chf.toLocaleString('de-CH')} CHF / ${prices.eur} EUR / ${prices.usd} USD`);
+    const namen = Object.keys(assets);
+    console.log(`  Vergleich: ${namen.length ? namen.join(', ') : 'keine Quelle erreichbar'}`);
+
+    entries = upsert(entries, { t: hour, sats, ...prices, ...(namen.length ? { assets } : {}) });
+  } else {
+    console.log(`  Stunde ${hour} ist bereits erfasst.`);
   }
 
-  const [sats, prices] = await Promise.all([loadBalance(), loadPrices()]);
-  const entry = { t: hour, sats, ...prices };
+  const nachgefuellt = await backfill(entries, now);
+  entries = nachgefuellt.entries;
+  if (nachgefuellt.gefuellt || nachgefuellt.uebersprungen) {
+    console.log(`  Nachgefüllt: ${nachgefuellt.gefuellt}, übersprungen: ${nachgefuellt.uebersprungen}`);
+  }
 
-  console.log(`  Bestand: ${(sats / 1e8).toFixed(8)} BTC`);
-  console.log(`  Kurse:   ${prices.chf.toLocaleString('de-CH')} CHF / ${prices.eur} EUR / ${prices.usd} USD`);
+  if (stundeSteht && !nachgefuellt.gefuellt) {
+    console.log('  Nichts zu tun.');
+    return;
+  }
 
   const next = {
     address: ADDRESS,
     startAt: START_AT,
     updatedAt: now.toISOString(),
-    entries: downsample(upsert(history.entries, entry), now),
+    entries: downsample(entries, now),
   };
 
   if (DRY_RUN) {
     console.log('  --dry-run: nichts geschrieben');
-    console.log(JSON.stringify(entry, null, 2));
+    console.log(JSON.stringify(next.entries.at(-1), null, 2));
     return;
   }
 

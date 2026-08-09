@@ -12,3 +12,26 @@ export const REFRESH_MS = 5 * 60 * 1000;
 
 /** Wie lange ein Filmzitat stehen bleibt. */
 export const QUOTE_MS = 12_000;
+
+/**
+ * Vergleichsanlagen für die Frage "was, wenn er um 00:00 umgeschichtet hätte".
+ * Alle Kurse werden in Franken abgelegt; `usd: true` heisst, die Quelle notiert
+ * in Dollar und wird beim Einsammeln umgerechnet.
+ *
+ * Aktienindizes handeln nicht rund um die Uhr. Bleibt ein Kurs zwischen
+ * Mitternacht und jetzt exakt gleich, wertet die Anzeige das als geschlossenen
+ * Markt — bei einem Index über mehrere Stunden ist ein unveränderter Kurs sonst
+ * praktisch ausgeschlossen.
+ */
+export const ASSETS = {
+  gold: { name: 'Gold', stooq: 'xauusd', usd: true },
+  spx: { name: 'S&P 500', stooq: '^spx', usd: true },
+  smi: { name: 'SMI', stooq: '^smi', usd: false },
+  eth: { name: 'Ethereum', coingecko: 'ethereum' },
+};
+
+/** Zinssatz des Vergleichs-Sparkontos, pro Jahr. */
+export const SAVINGS_RATE = 0.0075;
+
+/** So weit zurück füllt der Sammler fehlende Stunden nach. */
+export const BACKFILL_HOURS = 48;
